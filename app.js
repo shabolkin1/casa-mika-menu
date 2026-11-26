@@ -1,7 +1,8 @@
 (function () {
 "use strict";
 var T = window.CM_T, SVC = window.CM_SVC, CHIPS = window.CM_CHIPS, STF = window.CM_STAFF, BILL = window.CM_BILL;
-var LANGS = ["ru", "en", "vi", "ko"];
+var LANGS = ["vi", "en", "ru", "ko"];
+var LANG_LABEL = { vi: "Việt", en: "Eng", ru: "Рус", ko: "한국어" };
 var LOC = { ru: "ru-RU", en: "en-US", vi: "vi-VN", ko: "ko-KR" };
 var GROUP_ORDER = ["food", "drinks", "bar"];
 
@@ -28,7 +29,8 @@ function add(el, c) {
   if (Array.isArray(c)) { c.forEach(function (x) { add(el, x); }); return; }
   el.append(c.nodeType ? c : document.createTextNode(String(c)));
 }
-function pic(n) { return "img/" + n + ".webp"; }
+var THUMB = {}, FULL = {};
+function pic(n, big) { if (n && n.slice(0, 2) === "x:") { var id = n.slice(2); return (big && FULL[id]) || THUMB[id] || ""; } return "img/" + n + ".webp"; }
 function bgOf(n) { return (M && M.colors && M.colors[n]) || "#1f1a16"; }
 function fill(el) { el.replaceChildren(); for (var i = 1; i < arguments.length; i++) add(el, arguments[i]); }
 function ic(name, size) { var s = h("span", { "aria-hidden": "true", style: "display:inline-grid;place-items:center" }); s.innerHTML = (ICONS[name] || "").replace(/width="24" height="24"/, 'width="' + (size || 24) + '" height="' + (size || 24) + '"'); return s; }
@@ -166,12 +168,28 @@ var Store = (function () {
       S.slow = false; emit();
     }).catch(function () { S.slow = true; emit(); }).then(function () { pulling = false; if (again) { again = false; pull(); } });
   }
+  /* manager edits: small json per item + photo thumbnails; full photos on demand */
+  var editsAt = "";
+  function pullEdits() {
+    if (!sb) return Promise.resolve();
+    return Promise.all([sb.from("menu_overrides").select("id,data,updated_at"), sb.from("menu_photos").select("id,thumb,updated_at")]).then(function (r) {
+      if (r[0].error || r[1].error) return;
+      var stamp = r[0].data.map(function (x) { return x.id + x.updated_at; }).join() + "|" + r[1].data.map(function (x) { return x.id + x.updated_at; }).join();
+      if (stamp === editsAt) return; editsAt = stamp;
+      Object.keys(EDITS).forEach(function (k) { delete EDITS[k]; }); Object.keys(PHOTO_IDS).forEach(function (k) { delete PHOTO_IDS[k]; });
+      r[0].data.forEach(function (x) { if (BY[x.id] && x.data && typeof x.data === "object") EDITS[x.id] = x.data; });
+      r[1].data.forEach(function (x) { if (BY[x.id] && /^data:image\/(webp|jpeg);base64,/.test(x.thumb)) { PHOTO_IDS[x.id] = x.updated_at; if (THUMB[x.id] !== x.thumb) delete FULL[x.id]; THUMB[x.id] = x.thumb; } });
+      editsChanged();
+    }, function () {});
+  }
   function startSb() {
     S.store = "live";
     sb = window.supabase.createClient(CFG.supabaseUrl, CFG.supabaseKey, { auth: { persistSession: false } });
     sb.channel("cm").on("postgres_changes", { event: "*", schema: "public", table: "orders" }, pull)
       .on("postgres_changes", { event: "*", schema: "public", table: "requests" }, pull)
+      .on("postgres_changes", { event: "*", schema: "public", table: "menu_overrides" }, pullEdits)
       .on("postgres_changes", { event: "*", schema: "public", table: "stoplist" }, pull).subscribe();
+    pullEdits(); setInterval(function () { if (!document.hidden) pullEdits(); }, 120000);
     pull();
     setInterval(function () { if (!document.hidden) pull(); }, 15000);
     document.addEventListener("visibilitychange", function () { if (!document.hidden) pull(); });
@@ -181,9 +199,21 @@ var Store = (function () {
   function rpc(name, args) {
     return sb.rpc(name, Object.assign({ pin: pin() }, args)).then(function (r) { if (r.error) throw r.error; pull(); return r.data; });
   }
+  function apin() { return load("cm-admin-pin", ""); }
+  function arpc(name, args) { return sb.rpc(name, Object.assign({ pin: apin() }, args)).then(function (r) { if (r.error) throw r.error; return r.data; }); }
   return {
     on: function (f) { cbs.push(f); },
     live: function () { return !!sb; },
+    pullEdits: pullEdits,
+    photo: function (id) {
+      if (!sb) return Promise.resolve();
+      return sb.from("menu_photos").select("full_img").eq("id", id).maybeSingle().then(function (r) { if (r.data && r.data.full_img) FULL[id] = r.data.full_img; });
+    },
+    adminCheck: function (p) { return sb.rpc("admin_check", { pin: p }).then(function (r) { if (r.error) throw r.error; return r.data === true; }); },
+    adminSetItem: function (id, data) { return arpc("admin_set_item", { item_id: id, new_data: data }).then(function () { return pullEdits(); }); },
+    adminSetPhoto: function (id, thumb, full) { return arpc("admin_set_photo", { item_id: id, thumb: thumb, full_img: full }).then(function () { if (full) FULL[id] = full; else delete FULL[id]; }); },
+    adminSetPins: function (staffPin, adminPin) { return arpc("admin_set_pins", { new_staff: staffPin || null, new_admin: adminPin || null }); },
+    adminSetStop: function (ids) { return arpc("staff_set_stop", { new_ids: ids }).then(function () { pull(); }); },
     checkPin: function (p) { return sb.rpc("staff_check", { pin: p }).then(function (r) { if (r.error) throw r.error; return r.data === true; }); },
     boot: function () {
       if (CFG.supabaseUrl && CFG.supabaseKey && window.supabase) { startSb(); return; }
@@ -233,9 +263,38 @@ var Store = (function () {
   };
 })();
 
+
+/* ---------- manager edits on top of menu.json ---------- */
+var BASE = {}, EDITS = {}, PHOTO_IDS = {};
+function applyEdits() {
+  M.items.forEach(function (it) {
+    var b = BASE[it.id], e = EDITS[it.id] || {};
+    ["p", "n", "d", "s", "img", "lo", "ct", "v", "hide"].forEach(function (k) { if (k in b) it[k] = JSON.parse(JSON.stringify(b[k])); else delete it[k]; });
+    if (typeof e.p === "number" && e.p > 0) it.p = e.p;
+    if (Array.isArray(e.vp) && it.v) it.v.forEach(function (v, i) { if (typeof e.vp[i] === "number" && e.vp[i] > 0) v.p = e.vp[i]; });
+    if (it.v) it.p = Math.min.apply(null, it.v.map(function (v) { return v.p; }));
+    ["n", "d", "s"].forEach(function (k) { if (e[k] && typeof e[k] === "object") { it[k] = it[k] || {}; LANGS.forEach(function (l) { var x = e[k][l]; if (typeof x === "string" && x.trim()) it[k][l] = x.trim().slice(0, k === "s" ? 900 : 160); }); } });
+    if (e.hide === true) it.hide = true;
+    if (PHOTO_IDS[it.id]) { it.img = "x:" + it.id; delete it.lo; delete it.ct; }
+  });
+}
+function editsChanged() {
+  applyEdits();
+  if (S.view === "guest" && menuEl && !openSheet) { var y = window.scrollY; buildMenu(); window.scrollTo(0, y); renderDock(); }
+  if (S.view === "admin" && window.CM_ADMIN) window.CM_ADMIN.refresh();
+}
+function loadAdmin() {
+  if (window.CM_ADMIN) { window.CM_ADMIN.open(); return; }
+  var s = document.createElement("script"); s.src = "admin.js?v=" + (window.CM_VER || 1); s.onload = function () { window.CM_ADMIN.open(); }; document.body.append(s);
+}
+window.CM = { h: h, add: add, ic: ic, fill: fill, sheet: sheet, closeSheet: closeSheet, toast: toast, buzz: buzz, load: load, save: save, pic: pic, bgOf: bgOf, money: money,
+  get M() { return M; }, BY: BY, SEC: SEC, S: S, BASE: BASE, EDITS: EDITS, THUMB: THUMB, FULL: FULL, PHOTO_IDS: PHOTO_IDS, LANGS: LANGS, LANG_LABEL: LANG_LABEL,
+  Store: Store, applyEdits: applyEdits, editsChanged: editsChanged, render: function () { render(); }, nm: nm, get openSheet() { return openSheet; } };
+
 /* ---------- routing ---------- */
 function route() {
   var m = /^#table-(\d{1,2})$/.exec(location.hash);
+  if (location.hash === "#admin") { S.view = "admin"; document.body.setAttribute("data-view", "admin"); closeSheet(true); clearInterval(staffTimer); glow("order", "off"); window.onscroll = null; loadAdmin(); return; }
   if (location.hash === "#bar") S.view = "staff";
   else { S.view = "guest"; if (m) { var n = +m[1]; if (n >= 1 && n <= 99) { S.table = n; save("cm-table", n); } } }
   document.body.setAttribute("data-view", S.view);
@@ -322,7 +381,7 @@ var PAIR_ITEM = { "bo-luc-lac": ["chiara-terra-merlot-gl", "saigon", "rau-muong"
   "mix-grill": ["chiara-terra-merlot-gl", "saigon", "rau-muong"], "tom-hum": ["accomplice-chardonnay-gl", "torre-oria-sauvignon-blanc-gl", "rau-muong"],
   "bun-bo-hue": ["tra-dao", "saigon", "cam"], "met": ["saigon", "tra-dao", "sunset-crush"] };
 function groupIcon(it) { var g = SEC[it.sec].group; return g === "bar" ? (it.sec === "beer" ? "beer" : "wine") : g === "drinks" ? "cup" : "bowl"; }
-function available(id) { return BY[id] && !S.stop[id]; }
+function available(id) { return BY[id] && !S.stop[id] && !BY[id].hide; }
 function pairsFor(it) {
   var list = (PAIR_ITEM[it.id] || PAIR_SEC[it.sec] || []).filter(function (id) { return id !== it.id && available(id) && !qtyOf(id); });
   return list.slice(0, 3).map(function (id) { return BY[id]; });
@@ -339,9 +398,9 @@ function miniCards(list, api) {
   return h("div", { class: "minis" }, list.map(function (it) {
     var added = api.added && api.added[it.id];
     return h("div", { class: "mini-c" },
-      it.img ? h("img", { src: pic(it.img), alt: "", loading: "lazy", decoding: "async", style: "background:" + bgOf(it.img), onload: function (e) { e.target.classList.add("ld"); } }) : h("span", { class: "mini-ph", "aria-hidden": "true" }, ic(groupIcon(it), 34)),
+      it.img ? h("img", { class: it.ct ? "ct" : null, src: pic(it.img), alt: "", loading: "lazy", decoding: "async", style: "background-color:" + bgOf(it.img), onload: function (e) { e.target.classList.add("ld"); } }) : h("span", { class: "mini-ph", "aria-hidden": "true" }, ic(groupIcon(it), 34)),
       h("span", { class: "mini-n" }, nm(it)),
-      h("span", { class: "mini-p num" }, (it.v ? nm(it.v[0]) + " · " : "") + money(it.v ? it.v[0].p : it.p)),
+      h("span", { class: "mini-p num" }, priceLabel(it)),
       h("button", { class: "mini-a press" + (added ? " ok" : ""), "aria-label": t("add") + ": " + nm(it), onclick: function () {
         if (!quickDefault(it)) { closeSheet(); setTimeout(function () { openDish(it.id); }, 300); return; }
         addToCart(it.id, it.v ? 0 : null, false, 1); api.added = api.added || {}; api.added[it.id] = true; toast(nm(it) + " · " + t("added")); api.rebuild();
@@ -361,18 +420,14 @@ function lineOpt(it, l) {
 function renderGuest() {
   document.documentElement.lang = S.lang;
   var root = h("div", { class: "guest" });
-  var ph = h("div", { class: "ph" }, h("img", { src: "img/hero-night.webp", alt: "Casa Mika", fetchpriority: "high" }));
-  var langBar = h("div", { class: "lang", role: "group", "aria-label": "Language" }, h("span", { class: "knob", style: "transform:translateX(" + (LANGS.indexOf(S.lang) * 42) + "px)" }),
-    LANGS.map(function (l) { return h("button", { "aria-pressed": String(S.lang === l), onclick: function () { setLang(l); } }, l.toUpperCase()); }));
-  root.append(h("header", { class: "hero" }, ph, h("div", { class: "top" }, langBar)));
-  root.append(h("section", { class: "intro" },
-    h("div", { class: "hello" }, "Casa Mika"),
-    h("h1", { class: "tableword" }, t("table") + " ", h("b", { class: "num" }, S.table)),
-    h("p", { class: "lead" }, t("lead")),
-    h("button", { class: "staff-cta press", onclick: openService },
-      h("span", { class: "ic" }, ic("bell", 22)),
-      h("span", { class: "tx" }, h("b", null, t("callStaff")), h("small", null, t("callStaffSub"))),
-      ic("arrow", 20))));
+  var ph = h("div", { class: "ph" }, h("img", { src: "img/hero-s.webp", srcset: "img/hero-s.webp 900w, img/hero.webp 1584w", sizes: "(min-width:700px) 560px, 100vw", alt: "", fetchpriority: "high" }));
+  var langBar = h("div", { class: "lang", role: "group", "aria-label": "Language" }, h("span", { class: "knob", style: "transform:translateX(" + (LANGS.indexOf(S.lang) * 100) + "%)" }),
+    LANGS.map(function (l) { return h("button", { "aria-pressed": String(S.lang === l), lang: l, onclick: function () { setLang(l); } }, LANG_LABEL[l]); }));
+  root.append(h("header", { class: "hero" }, ph,
+    h("div", { class: "hero-in" }, langBar),
+    h("div", { class: "hero-tx" },
+      h("h1", { class: "tableword" }, t("table") + " ", h("b", { class: "num" }, S.table)),
+      h("p", { class: "lead" }, t("tagline")))));
 
   var seg = h("div", { class: "seg", role: "group", "aria-label": "Menu" }, h("span", { class: "knob", style: "transform:translateX(" + (GROUP_ORDER.indexOf(S.group) * 100) + "%)" }),
     GROUP_ORDER.map(function (g) { var gr = M.groups.find(function (x) { return x.id === g; }); return h("button", { "aria-pressed": String(S.group === g), onclick: function () { setGroup(g); } }, nm(gr)); }));
@@ -381,18 +436,12 @@ function renderGuest() {
   menuEl = h("main", { class: "menu" });
   root.append(menuEl);
 
-  var sel = h("select", { "aria-label": t("table"), onchange: function (e) { location.hash = "table-" + e.target.value; } });
-  for (var i = 1; i <= 40; i++) sel.append(h("option", { value: i, selected: i === S.table }, i));
   storeNoteEl = h("p", { class: "store-note" });
-  root.append(h("footer", { class: "foot" },
-    h("img", { src: "img/logo.png", alt: "Casa Mika", class: "foot-logo" }),
-    h("span", null, t("address")),
-    h("span", { class: "foot-demo" }, h("label", null, t("table") + " ", sel), h("a", { href: "#bar" }, t("bar"))),
-    storeNoteEl));
+  root.append(h("footer", { class: "foot" }, h("span", null, t("address")), storeNoteEl));
   guestRoot = root;
   buildMenu();
   dockEl = h("div", { class: "dock" });
-  document.getElementById("app").replaceChildren(root, dockEl);
+  document.getElementById("app").replaceChildren(root, h("div", { class: "edge", "aria-hidden": "true" }), dockEl);
   renderStoreNote();
   renderDock();
   parallax(ph);
@@ -405,7 +454,7 @@ function parallax(ph) {
   var ticking = false;
   window.onscroll = function () {
     if (ticking || S.view !== "guest") return; ticking = true;
-    requestAnimationFrame(function () { var y = window.scrollY; if (y < 600) { ph.style.transform = "translateY(" + (y * 0.4) + "px)"; ph.style.opacity = String(Math.max(0, 1 - y / 420)); } ticking = false; });
+    requestAnimationFrame(function () { var y = window.scrollY; if (y < 400) { ph.style.transform = "translateY(" + (y * 0.35) + "px)"; ph.style.opacity = String(Math.max(0, 1 - y / 220)); } ticking = false; });
   };
 }
 function setLang(l) { S.lang = l; save("cm-lang", l); var y = window.scrollY; renderGuest(); window.scrollTo(0, y); }
@@ -428,17 +477,20 @@ function buildMenu() {
     return h("button", { class: i === 0 ? "on" : "", "data-sec": s.id, onclick: function () { var el = document.getElementById("s-" + s.id); if (el) window.scrollTo({ top: el.getBoundingClientRect().top + window.scrollY - barH() - 6, behavior: reduced() ? "auto" : "smooth" }); } }, nm(s));
   }));
   var kids = [];
-  var hits = M.items.filter(function (it) { return it.img && it.tags.indexOf("hit") >= 0 && SEC[it.sec].group === S.group; });
-  if (hits.length) {
-    kids.push(h("h2", { class: "h-title first" }, t("hits")));
-    kids.push(h("div", { class: "hits" }, hits.map(function (it) {
-      return h("button", { class: "hit press", onclick: function () { openDish(it.id); } },
-        h("img", { src: pic(it.img), alt: "", loading: "lazy", decoding: "async", style: "background:" + bgOf(it.img), onload: function (e) { e.target.classList.add("ld"); } }),
-        h("span", { class: "cap" }, h("span", { class: "nm" }, nm(it)), S.lang !== "vi" ? h("span", { class: "vi", lang: "vi" }, it.n.vi) : null, h("span", { class: "pr" }, priceLabel(it))));
+  var rep = repeatCard(); if (rep) kids.push(rep);
+  var now = nowPicks();
+  if (now.list.length) {
+    kids.push(h("h2", { class: "h-title first" }, t(now.title)));
+    kids.push(h("div", { class: "hits" }, now.list.map(function (it) {
+      var out = !!S.stop[it.id];
+      return h("button", { class: "hit press" + (out ? " out" : ""), onclick: function () { if (!out) openDish(it.id); } },
+        h("img", { class: it.ct ? "ct" : null, src: pic(it.img), alt: "", loading: "lazy", decoding: "async", style: "background-color:" + bgOf(it.img), onload: function (e) { e.target.classList.add("ld"); } }),
+        h("span", { class: "nm" }, nm(it)),
+        h("span", { class: "pr num" }, out ? t("out") : priceLabel(it)));
     })));
   }
   secs.forEach(function (s) {
-    var items = M.items.filter(function (it) { return it.sec === s.id; });
+    var items = M.items.filter(function (it) { return it.sec === s.id && !it.hide; });
     kids.push(h("section", { class: "sec", id: "s-" + s.id, "data-sec": s.id },
       h("h2", { class: "h-title" }, nm(s)),
       s.note ? h("p", { class: "h-note" }, nm({ n: s.note })) : null,
@@ -457,13 +509,54 @@ function rowFor(it) {
       q ? h("span", { class: "q num" }, q) : ic("plus", 22));
   return h("div", { class: "row" + (it.img ? " ph" : "") + (out ? " out" : ""), role: "button", tabindex: "0", "data-row": it.id,
       onclick: function () { if (!out) openDish(it.id); }, onkeydown: function (e) { if ((e.key === "Enter" || e.key === " ") && !out) { e.preventDefault(); openDish(it.id); } } },
-    it.img ? h("img", { class: "th", src: pic(it.img), alt: "", loading: "lazy", decoding: "async", style: "background:" + bgOf(it.img), onload: function (e) { e.target.classList.add("ld"); } }) : null,
-    h("div", { style: "min-width:0" },
+    it.img ? h("img", { class: "th" + (it.ct ? " ct" : ""), src: pic(it.img), alt: "", loading: "lazy", decoding: "async", style: "background-color:" + bgOf(it.img), onload: function (e) { e.target.classList.add("ld"); } }) : null,
+    h("div", { class: "tx" },
       h("div", { class: "nm" }, nm(it), marks),
       S.lang !== "vi" && it.n.vi !== nm(it) ? h("div", { class: "vi", lang: "vi" }, it.n.vi) : null,
-      it.d ? h("div", { class: "ds" }, nm({ n: it.d })) : null,
       h("div", { class: "pr num" }, priceLabel(it))),
     btn);
+}
+/* what fits the time of day: morning coffee and breakfast, lunch, evening drinks */
+var DAYPART = {
+  morning: ["breakfast", "light", "coffee", "tea", "juice", "smoothie"],
+  day: ["viet", "noodles", "rice", "soup", "salad", "claypot", "juice", "smoothie", "coffee", "tea", "mocktail"],
+  evening: ["signature", "classic", "by-glass", "red", "white", "beer", "starters", "seafood", "viet", "western", "mocktail"]
+};
+function daypart() { var hr = new Date().getHours(); return hr >= 5 && hr < 11 ? "morning" : hr >= 11 && hr < 17 ? "day" : "evening"; }
+function nowPicks() {
+  var dp = daypart(), pref = DAYPART[dp];
+  var list = M.items.filter(function (it) { return it.img && !it.hide && SEC[it.sec].group === S.group; });
+  function rank(it) { var i = pref.indexOf(it.sec); return (i < 0 ? 50 : i) - (it.tags.indexOf("hit") >= 0 ? 0.5 : 0) + (S.stop[it.id] ? 100 : 0); }
+  list.sort(function (a, b) { return rank(a) - rank(b); });
+  return { title: "now_" + dp, list: list.slice(0, 10) };
+}
+/* repeat: regulars at a coworking order the same thing again */
+function lastOrder() {
+  var L = load("cm-last", null);
+  if (!L || !Array.isArray(L.items) || Date.now() - L.at > 30 * 86400000) return null;
+  var items = L.items.filter(function (x) { return available(x.id); });
+  return items.length ? { items: items, at: L.at } : null;
+}
+function repeatPlan() {
+  var L = lastOrder(); if (!L || S.cart.length) return null;
+  var age = Date.now() - L.at;
+  if (age < 45 * 60000 && activeOrders().length) return null;
+  var drinks = L.items.filter(function (x) { return SEC[BY[x.id].sec].group !== "food"; });
+  if (age < 6 * 3600000 && drinks.length) return { title: t("again"), items: drinks };
+  return { title: t("repeat"), items: L.items };
+}
+function repeatCard(inSheet) {
+  var P = repeatPlan(); if (!P) return null;
+  var names = P.items.map(function (x) { return (x.q > 1 ? x.q + "× " : "") + nm(BY[x.id]); }).join(", ");
+  var sum = P.items.reduce(function (s, x) { return s + itemPrice(BY[x.id], x.v) * x.q; }, 0);
+  var first = P.items.map(function (x) { return BY[x.id]; }).find(function (it) { return it.img; });
+  return h("div", { class: "again" + (inSheet ? " in-sheet" : "") },
+    first ? h("img", { class: first.ct ? "ct" : null, src: pic(first.img), alt: "", style: "background-color:" + bgOf(first.img) }) : h("span", { class: "again-ic" }, ic("cup", 22)),
+    h("div", { class: "tx" }, h("b", null, P.title), h("span", null, names)),
+    h("button", { class: "again-go press", onclick: function () {
+      P.items.forEach(function (x) { addToCart(x.id, x.v, x.sp, x.q); });
+      toast(t("added")); if (openSheet) closeSheet(); buildMenu();
+    } }, h("span", null, t("repeatBtn")), h("small", { class: "num" }, money(sum))));
 }
 function barH() { var b = guestRoot && guestRoot.querySelector(".bar"); var v = b ? b.offsetHeight : 120; document.documentElement.style.setProperty("--barH", (v + 6) + "px"); return v; }
 function watchSpy() {
@@ -500,7 +593,7 @@ function quickAdd(it, btn) {
 function fly(fromEl, src) {
   if (reduced() || !fromEl) return;
   requestAnimationFrame(function () {
-    var target = dockEl && dockEl.querySelector(".cart"); if (!target) return;
+    var target = dockEl && (dockEl.querySelector(".cart") || dockEl.querySelector(".bell")); if (!target) return;
     var a = fromEl.getBoundingClientRect(), b = target.getBoundingClientRect();
     var el = src ? h("img", { class: "fly", src: src, alt: "" }) : h("div", { class: "fly", style: "background:var(--gold)" });
     var size = Math.min(a.width, a.height, 120);
@@ -520,17 +613,18 @@ function pendingReq(k) { return S.reqs.find(function (r) { return S.mineR.indexO
 function renderDock() {
   if (!dockEl) return;
   var n = cartCount(), act = activeOrders(), live = S.reqs.some(function (r) { return S.mineR.indexOf(r.id) >= 0 && r.status === "new"; });
-  var kids = [h("button", { class: "bell press" + (live ? " live" : ""), "aria-label": t("service"), onclick: openService }, ic("bell", 26), h("span", { class: "dot" }))];
+  var solo = !n && !act.length;
+  var kids = [h("button", { class: "bell press" + (live ? " live" : "") + (solo ? " wide" : ""), "aria-label": t("callStaff"), onclick: openService },
+    ic("bell", 24), solo ? h("span", { class: "t" }, t("callStaff")) : null, h("span", { class: "dot" }))];
   if (n) {
-    kids.push(h("button", { class: "cart press show" + (dockHad ? "" : " enter"), onclick: openCart }, h("span", { class: "n num" }, n), h("span", { class: "t" }, t("cart")), h("span", { class: "num" }, money(cartSum()))));
+    kids.push(h("button", { class: "cart press" + (dockHad ? "" : " enter"), onclick: openCart }, h("span", { class: "n num" }, n), h("span", { class: "t" }, t("cart")), h("span", { class: "num" }, money(cartSum()))));
   } else if (act.length) {
     var o = act[0], w = { new: 22, accepted: 60, served: 100 }[o.status];
     kids.push(h("button", { class: "track press", onclick: openStatus },
-      h("span", { style: "flex:1" }, t("st_" + o.status)), h("span", { class: "mini" }, h("i", { style: "width:" + w + "%;background:var(--gold2)" }))));
-  } else {
-    kids.push(h("button", { class: "cart press", tabindex: "-1", "aria-hidden": "true" }, h("span", { class: "n" }, "0"), h("span", { class: "t" }, t("cart"))));
+      h("span", { class: "t" }, t("st_" + o.status)), h("span", { class: "mini" }, h("i", { style: "width:" + w + "%" }))));
   }
   dockHad = !!n;
+  document.body.classList.toggle("has-cart", !!n);
   dockEl.replaceChildren.apply(dockEl, kids);
 }
 
@@ -540,16 +634,17 @@ function openDish(id) {
   var st8 = { v: it.v ? 0 : null, sp: false, q: 1 };
   var canSpicy = !!SPICY_SEC[it.sec];
   sheet(function (body, api) {
-    var sec = SEC[it.sec];
     var total = itemPrice(it, st8.v) * st8.q;
+    if (it.img && it.img.slice(0, 2) === "x:" && !FULL[it.id] && !api.fetching) { api.fetching = true; Store.photo(it.id).then(function () { if (openSheet === api) { var im = api.el.querySelector(".dish-ph img"); if (im) im.src = pic(it.img, true); } }); }
     fill(body, 
-      it.img ? h("div", { class: "dish-ph" }, h("img", { src: pic(it.img), alt: nm(it), loading: "lazy", decoding: "async", style: "background:" + bgOf(it.img), onload: function (e) { e.target.classList.add("ld"); } })) : h("div", { style: "height:30px" }),
+      it.img ? (it.lo ? h("div", { class: "dish-ph lo" + (it.ct ? " ct" : "") }, it.ct ? null : h("img", { class: "bk", src: pic(it.img), alt: "" }), h("img", { class: "fg", src: pic(it.img), alt: nm(it) }))
+        : h("div", { class: "dish-ph" }, h("img", { src: pic(it.img, true), alt: nm(it), loading: "lazy", decoding: "async", style: "background:" + bgOf(it.img), onload: function (e) { e.target.classList.add("ld"); } }))) : h("div", { style: "height:30px" }),
       h("div", { class: "dish-meta" },
-        h("span", { class: "sec-l" }, nm(sec) + (it.tags.indexOf("hit") >= 0 ? " · " + t("hitBadge") : "")),
         h("h2", null, nm(it)),
         S.lang !== "vi" && it.n.vi !== nm(it) ? h("span", { class: "vi", lang: "vi" }, it.n.vi) : null,
         it.d ? h("p", { class: "dd" }, nm({ n: it.d })) : null,
-        it.s ? h("p", { class: "story" }, nm({ n: it.s })) : null),
+        it.s ? h("p", { class: "story" + (api.full ? " full" : "") }, nm({ n: it.s })) : null,
+        it.s && !api.full ? h("button", { class: "more", onclick: function () { api.full = true; api.rebuild(); } }, t("more")) : null),
       it.v ? h("div", null, h("div", { class: "lab" }, t("choose")),
         h("div", { class: "opts" }, it.v.map(function (v, i) {
           return h("button", { class: "opt press", "aria-pressed": String(st8.v === i), onclick: function () { st8.v = i; buzz(6); api.rebuild(); } }, h("b", null, nm(v)), h("span", { class: "num" }, money(v.p)));
@@ -564,11 +659,12 @@ function openDish(id) {
           h("span", { class: "num" }, st8.q),
           h("button", { "aria-label": "+", onclick: function () { st8.q = Math.min(20, st8.q + 1); api.rebuild(); } }, "+")),
         h("button", { class: "go press", onclick: function () {
-          var img = api.el.querySelector(".dish-ph img");
+          var img = api.el.querySelector(".dish-ph img.fg") || api.el.querySelector(".dish-ph img");
           addToCart(it.id, st8.v, st8.sp, st8.q); closeSheet();
           setTimeout(function () { fly(img || api.el, img ? img.src : null); }, 60);
         } }, h("span", { class: "lbl" }, t("add")), h("span", { class: "num" }, money(total)))));
-    var keep = body.querySelector(".dish-ph img"); if (keep && api.seen) keep.style.animation = "none"; api.seen = true;
+    body.querySelectorAll(".dish-ph img").forEach(function (keep) { if (api.seen) keep.style.animation = "none"; }); api.seen = true;
+    var sto = body.querySelector(".story:not(.full)"), mb = body.querySelector(".more"); if (sto && mb) requestAnimationFrame(function () { if (sto.scrollHeight <= sto.clientHeight + 2) mb.remove(); });
     var go = body.querySelector(".buy .go"); if (go) requestAnimationFrame(function () { go.classList.remove("tight"); if (go.scrollWidth > go.clientWidth + 1) go.classList.add("tight"); });
   }, { label: nm(it), kind: "dish", cls: it.img ? "photo" : "" });
 }
@@ -580,11 +676,11 @@ function openCart() {
     if (!lines.length) { closeSheet(); return; }
     var sending = api.sending;
     fill(body, 
-      h("div", { style: "display:flex;justify-content:space-between;align-items:baseline;gap:12px;padding:8px 52px 0 0" }, h("h2", null, t("yourOrder")), h("span", { style: "font-weight:700;color:var(--gold2)" }, t("table") + " " + S.table)),
+      h("div", { class: "s-title" }, h("h2", null, t("yourOrder")), h("p", null, t("table") + " " + S.table)),
       h("div", null, lines.map(function (l) {
         var it = BY[l.id];
         return h("div", { class: "line" + (it.img ? "" : " np") },
-          it.img ? h("img", { src: pic(it.img), alt: "", loading: "lazy", decoding: "async", style: "background:" + bgOf(it.img), onload: function (e) { e.target.classList.add("ld"); } }) : null,
+          it.img ? h("img", { class: it.ct ? "ct" : null, src: pic(it.img), alt: "", loading: "lazy", decoding: "async", style: "background-color:" + bgOf(it.img), onload: function (e) { e.target.classList.add("ld"); } }) : null,
           h("div", { style: "min-width:0" }, h("div", { class: "nm" }, nm(it)), lineOpt(it, l) ? h("div", { class: "o" }, lineOpt(it, l)) : null, h("div", { class: "pr num" }, money(itemPrice(it, l.v) * l.q))),
           h("div", { class: "stepper" },
             h("button", { "aria-label": "−", onclick: function () { setLineQty(l.k, l.q - 1); api.rebuild(); } }, "−"),
@@ -593,15 +689,15 @@ function openCart() {
       })),
       (function () { var u = upsellFor(); return u.length ? h("div", null, h("div", { class: "lab" }, t("upsell")), miniCards(u, api)) : null; })(),
       h("div", null, h("div", { class: "lab" }, t("wishes")),
-        h("div", { class: "pills" }, Object.keys(CHIPS).map(function (c) {
+        h("div", { class: "pills scroll" }, Object.keys(CHIPS).map(function (c) {
           return h("button", { class: "pill press", "aria-pressed": String(!!S.chips[c]), onclick: function () { S.chips[c] = !S.chips[c]; buzz(6); api.rebuild(); } }, CHIPS[c][S.lang]);
-        }))),
-      h("div", null, h("label", { class: "lab", for: "cm-note", style: "display:block" }, t("note")),
-        (function () { var ta = h("textarea", { id: "cm-note", maxlength: "300", placeholder: t("notePh"), oninput: function (e) { S.note = e.target.value; } }); ta.value = S.note; return ta; })()),
+        }).concat(api.noteOpen || S.note ? [] : [h("button", { class: "pill press add-note", onclick: function () { api.noteOpen = true; api.rebuild(); var n = body.querySelector("#cm-note"); if (n) n.focus(); } }, ic("pen", 16), t("addNote"))]))),
+      api.noteOpen || S.note ? (function () { var ta = h("textarea", { id: "cm-note", maxlength: "300", "aria-label": t("note"), placeholder: t("notePh"), oninput: function (e) { S.note = e.target.value; } }); ta.value = S.note; return ta; })() : null,
       api.err ? h("p", { class: "err", role: "alert" }, api.err) : null,
-      h("div", { class: "buy" }, h("button", { class: "go press", disabled: sending || S.store === "loading", "data-wait": S.store === "loading" ? "1" : null, onclick: function () { sendOrder(api); } },
-        h("span", null, sending ? t("sending") : t("send")), h("span", { class: "num" }, money(cartSum())))),
-      h("p", { style: "margin:0;text-align:center;font-size:14px;color:var(--faint)" }, t("payNote")));
+      h("div", { class: "buy" }, h("div", { class: "buy-col" },
+        h("button", { class: "go press", disabled: sending || S.store === "loading", "data-wait": S.store === "loading" ? "1" : null, onclick: function () { sendOrder(api); } },
+          h("span", null, sending ? t("sending") : t("send")), h("span", { class: "num" }, money(cartSum()))),
+        h("p", { class: "pay-note" }, t("payNote")))));
   }, { label: t("yourOrder"), kind: "cart" });
 }
 function sendOrder(api) {
@@ -613,8 +709,9 @@ function sendOrder(api) {
     note: S.note.trim().slice(0, 300), status: "new", createdAt: Date.now(), code: 100 + Math.floor(Math.random() * 900), lang: S.lang })
   .then(function (id) {
     S.mineO = [id].concat(S.mineO).slice(0, 20); save("cm-mine-o", S.mineO);
+    save("cm-last", { items: items, at: Date.now() });
     S.cart = []; S.chips = {}; S.note = ""; save("cm-cart", S.cart);
-    closeSheet(); refreshCounts(); buzz([12, 60, 12]); toast(t("sentToast"));
+    closeSheet(); refreshCounts(); buildMenu(); buzz([12, 60, 12]); toast(t("sentToast")); glow("order", "burst");
     setTimeout(openStatus, 550);
   }, function () { api.sending = false; api.err = t("errSend"); api.rebuild(); });
 }
@@ -636,25 +733,28 @@ function ripple(el) {
 }
 function openService() {
   sheet(function (body, api) {
-    fill(body, 
-      h("div", { style: "padding:8px 52px 0 0" }, h("h2", null, t("service")), h("p", { style: "margin:6px 0 0;color:var(--soft)" }, t("serviceSub") + " · " + t("table") + " " + S.table)),
+    function tile(k, icon, label, onclick, open) {
+      var p = pendingReq(k);
+      return h("button", { class: "press" + (p ? " sent" : "") + (open ? " open" : ""), onclick: onclick },
+        h("span", { class: "ic" }, ic(p ? "check" : icon, 20)),
+        h("span", { class: "tl" }, h("b", null, label), p ? h("small", null, t("rq_new")) : null));
+    }
+    fill(body,
+      h("div", { class: "s-title" }, h("h2", null, t("service")), h("p", null, t("table") + " " + S.table + " · " + t("serviceSub"))),
       h("div", { class: "svc" }, SVC.map(function (s) {
-        var p = pendingReq(s.k);
-        return h("button", { class: p ? "sent" : "", onclick: function (e) { sendReq(s.k, "", e.currentTarget); } },
-          h("span", { class: "ic" }, ic(p ? "check" : s.ic, 24)),
-          h("span", null, h("b", null, nm(s)), p ? h("small", null, t("rq_new")) : null));
-      }),
-      h("button", { class: "wide" + (pendingReq("bill") ? " sent" : ""), onclick: function () { api.bill = !api.bill; api.rebuild(); } },
-        h("span", { class: "ic" }, ic(pendingReq("bill") ? "check" : "bill", 24)), h("span", null, h("b", null, t("bill")), pendingReq("bill") ? h("small", null, t("rq_new")) : null))),
-      api.bill ? h("div", null, h("div", { class: "lab" }, t("billHow")), h("div", { class: "billrow" }, ["cash", "card", "transfer"].map(function (m) {
+        return tile(s.k, s.ic, nm(s), function (e) { sendReq(s.k, "", e.currentTarget); });
+      }).concat([
+        tile("bill", "bill", t("bill"), function () { api.bill = !api.bill; api.otherOpen = false; api.rebuild(); }, api.bill),
+        tile("other", "pen", t("other"), function () { api.otherOpen = !api.otherOpen; api.bill = false; api.rebuild(); var n = body.querySelector("#cm-other"); if (n) n.focus(); }, api.otherOpen)
+      ])),
+      api.bill ? h("div", { class: "svc-more" }, h("div", { class: "lab" }, t("billHow")), h("div", { class: "billrow" }, ["cash", "card", "transfer"].map(function (m) {
         return h("button", { class: "pill press", onclick: function (e) { api.bill = false; sendReq("bill", m, e.currentTarget); } }, t(m));
       }))) : null,
-      h("div", null, h("label", { class: "lab", for: "cm-other", style: "display:block" }, t("other")),
-        h("div", { style: "display:flex;gap:8px;align-items:stretch" },
-          (function () { var ta = h("textarea", { id: "cm-other", maxlength: "200", placeholder: t("otherPh"), style: "min-height:52px", oninput: function (e) { api.other = e.target.value; } }); ta.value = api.other || ""; return ta; })(),
-          h("button", { class: "go press", style: "flex:0 0 auto;height:auto;padding:0 18px", onclick: function () {
-            var ta = body.querySelector("#cm-other"), v = ta.value.trim(); if (!v) { ta.focus(); return; } api.other = ""; ta.value = ""; sendReq("other", v);
-          } }, t("sendReq")))));
+      api.otherOpen ? h("div", { class: "svc-more other-row" },
+        (function () { var ta = h("textarea", { id: "cm-other", maxlength: "200", rows: "1", "aria-label": t("other"), placeholder: t("otherPh"), oninput: function (e) { api.otherTx = e.target.value; } }); ta.value = api.otherTx || ""; return ta; })(),
+        h("button", { class: "go press", onclick: function () {
+          var ta = body.querySelector("#cm-other"), v = ta.value.trim(); if (!v) { ta.focus(); return; } api.otherTx = ""; api.otherOpen = false; sendReq("other", v);
+        } }, t("sendReq"))) : null);
   }, { label: t("service"), kind: "service" });
 }
 function openBill() { openService(); if (openSheet) { openSheet.bill = true; openSheet.rebuild(); } }
@@ -664,8 +764,9 @@ function openStatus() {
   sheet(function (body) {
     var mine = S.orders.filter(function (o) { return S.mineO.indexOf(o.id) >= 0; }).slice(0, 6);
     var reqs = S.reqs.filter(function (r) { return S.mineR.indexOf(r.id) >= 0; }).slice(0, 8);
-    fill(body, 
-      h("div", { style: "padding:8px 52px 0 0" }, h("h2", null, t("myTable") + " · " + S.table)),
+    fill(body,
+      h("div", { class: "s-title" }, h("h2", null, t("myTable") + " · " + S.table)),
+      repeatCard(true),
       mine.length ? mine.map(function (o) {
         var idx = ["new", "accepted", "served"].indexOf(o.status);
         return h("article", { class: "ord" },
@@ -703,7 +804,7 @@ function openSearch() {
       if (best === 99 && it.d && norm(it.d[S.lang]).indexOf(q) >= 0) best = 3;
       return best;
     }
-    var found = M.items.map(function (it) { return { it: it, s: score(it) }; }).filter(function (x) { return x.s < 99; })
+    var found = M.items.filter(function (it) { return !it.hide; }).map(function (it) { return { it: it, s: score(it) }; }).filter(function (x) { return x.s < 99; })
       .sort(function (a, b) { return a.s - b.s; }).slice(0, 40).map(function (x) { return x.it; });
     res.replaceChildren.apply(res, found.length ? found.map(function (it) {
       var r = rowFor(it);
@@ -847,24 +948,47 @@ function openStop() {
   }, { label: st("stop"), kind: "stop" });
 }
 
+
+/* ---------- screen-edge glow ---------- */
+var glowEl = null, glowTimer = 0, glowBusy = false;
+function glow(kind, mode) {
+  if (!glowEl) { glowEl = h("div", { class: "glow", "aria-hidden": "true" }, h("b", null, h("i")), h("i")); document.body.append(glowEl); }
+  clearTimeout(glowTimer); glowBusy = false;
+  if (mode === "off") { glowEl.className = "glow"; return; }
+  if (mode === "breathe" && glowEl.classList.contains("breathe") && glowEl.classList.contains("k-" + kind)) return;
+  glowEl.className = "glow k-" + kind;
+  void glowEl.offsetWidth;
+  glowEl.classList.add(mode === "breathe" ? "breathe" : "burst");
+  if (mode === "burst") { glowBusy = true; glowTimer = setTimeout(function () { glowBusy = false; glowEl.className = "glow"; if (S.view === "staff") staffGlow(null); }, 2450); }
+}
+function staffGlow(fresh) {
+  var reqs = S.reqs.some(function (r) { return r.status === "new"; });
+  var ords = S.orders.some(function (o) { return o.status === "new"; });
+  if (fresh) { glow(fresh, "burst"); return; }
+  if (glowBusy) return;
+  if (!reqs && !ords) glow("order", "off"); else glow(reqs ? "req" : "order", "breathe");
+}
+
 /* ---------- render + data changes ---------- */
 var lastStop = "";
 function render() {
   closeSheet(true);
   if (S.view === "staff") { window.onscroll = null; renderStaff(); clearInterval(staffTimer); staffTimer = setInterval(function () { if (S.view === "staff" && !openSheet) renderStaff(); }, 20000); }
-  else { clearInterval(staffTimer); renderGuest(); }
+  else { clearInterval(staffTimer); glow("order", "off"); renderGuest(); }
 }
 Store.on(function () {
+  if (S.view === "admin") { if (window.CM_ADMIN) window.CM_ADMIN.refresh(); return; }
   /* chimes for the bar */
   var ids = {}; S.orders.forEach(function (o) { ids["o" + o.id] = o.status; }); S.reqs.forEach(function (r) { ids["r" + r.id] = r.status; });
   if (seenIds && S.view === "staff") {
     var newReq = S.reqs.some(function (r) { return r.status === "new" && !seenIds["r" + r.id]; });
     var newOrd = S.orders.some(function (o) { return o.status === "new" && !seenIds["o" + o.id]; });
     if (newReq) chime("req"); else if (newOrd) chime("order");
-  }
+    staffGlow(newReq ? "req" : newOrd ? "order" : null);
+  } else if (S.view === "staff") staffGlow(null);
   /* guest: tell when the bar moves my order or finishes my request */
   if (seenIds && S.view === "guest") {
-    S.orders.forEach(function (o) { if (S.mineO.indexOf(o.id) >= 0 && seenIds["o" + o.id] && seenIds["o" + o.id] !== o.status) { toast(t("stLong_" + o.status), o.status === "served" ? "check" : "clock"); buzz([20, 80, 20]); } });
+    S.orders.forEach(function (o) { if (S.mineO.indexOf(o.id) >= 0 && seenIds["o" + o.id] && seenIds["o" + o.id] !== o.status) { toast(t("stLong_" + o.status), o.status === "served" ? "check" : "clock"); buzz([20, 80, 20]); glow(o.status === "served" ? "ok" : "order", "burst"); } });
     S.reqs.forEach(function (r) { if (S.mineR.indexOf(r.id) >= 0 && seenIds["r" + r.id] === "new" && r.status === "done") toast(t("rq_done")); });
   }
   seenIds = ids;
@@ -878,17 +1002,18 @@ Store.on(function () {
 });
 
 /* ---------- boot ---------- */
+var T0 = performance.now();
 function boot() {
-  fetch("menu.json").then(function (r) { return r.json(); }).then(function (data) {
+  fetch("menu.json?v=" + (window.CM_VER || 1)).then(function (r) { return r.json(); }).then(function (data) {
     M = data;
     M.sections.forEach(function (s) { SEC[s.id] = s; if (s.note && /spicy/i.test(s.note.en)) SPICY_SEC[s.id] = true; });
-    M.items.forEach(function (it) { BY[it.id] = it; it.tags = it.tags || []; });
+    M.items.forEach(function (it) { BY[it.id] = it; it.tags = it.tags || []; BASE[it.id] = JSON.parse(JSON.stringify(it)); });
     S.cart = (S.cart || []).filter(function (l) { return l && BY[l.id]; });
     window.addEventListener("hashchange", route);
     route();
     Store.boot();
     var sp = document.getElementById("splash");
-    if (sp) setTimeout(function () { sp.classList.add("gone"); splashDone = true; setTimeout(function () { sp.remove(); }, 800); }, S.view === "guest" ? 1000 : 0);
+    if (sp) { var wait = Math.max(0, (S.view === "guest" ? 1700 : 1200) - (performance.now() - T0)); setTimeout(function () { sp.classList.add("gone"); splashDone = true; setTimeout(function () { sp.remove(); }, 900); }, wait); }
   }, function () {
     document.getElementById("app").textContent = "Menu failed to load. Reload the page.";
   });
