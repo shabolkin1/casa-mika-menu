@@ -1,6 +1,6 @@
 # Casa Mika · QR menu and table ordering
 
-Open-source QR ordering for Casa Mika (37 Trần Bạch Đằng, Đà Nẵng). Made by Alexey and Dmitry as a gift to the café.
+Open-source QR ordering for Casa Mika (37 Trần Bạch Đằng, Đà Nẵng). Made by Alex and Dmitry as a gift to the café.
 
 - **Guests** scan the QR on their table, browse the menu in Vietnamese, English, Russian or Korean, order and call the staff (waiter, napkins, water, bill and more). Payment stays with the waiter.
 - **Staff** see orders and requests live on a tablet: `/#bar`, PIN protected, Vietnamese or English.
