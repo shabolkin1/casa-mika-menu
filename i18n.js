@@ -173,6 +173,10 @@ window.CM_STAFF = {
       rateBadThanks: "감사합니다. 매니저에게 전달되었습니다", later: "나중에" }
   };
   Object.keys(add).forEach(function (l) { Object.assign(T[l], add[l]); });
+  Object.assign(T.ru, { popToday: "Сегодня заказывают", popHits: "Любимое в Casa Mika", popN: "сегодня заказали {n} раз" });
+  Object.assign(T.en, { popToday: "Ordered most today", popHits: "Casa Mika favourites", popN: "ordered {n} times today" });
+  Object.assign(T.vi, { popToday: "Được gọi nhiều hôm nay", popHits: "Món được yêu thích", popN: "hôm nay đã gọi {n} lần" });
+  Object.assign(T.ko, { popToday: "오늘 많이 주문한 메뉴", popHits: "Casa Mika 인기 메뉴", popN: "오늘 {n}번 주문됨" });
   B.qrpaid = { vi: "Đã chuyển QR, kiểm tra tiền", ru: "перевёл по QR", en: "paid by QR, check the bank", ko: "QR 송금 완료" };
   Object.assign(ST.vi, { offline: "Mất kết nối với máy chủ. Đơn mới có thể chưa hiện. Đang thử lại…", back: "Đã kết nối lại" });
   Object.assign(ST.en, { offline: "No connection to the server. New orders may not show yet. Retrying…", back: "Back online" });

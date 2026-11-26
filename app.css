@@ -20,7 +20,11 @@
   --font:-apple-system,BlinkMacSystemFont,"SF Pro Text","Inter","Noto Sans KR",system-ui,"Segoe UI",sans-serif;
   --fontD:-apple-system,BlinkMacSystemFont,"SF Pro Display","Inter","Noto Sans KR",system-ui,sans-serif;
   --ease:cubic-bezier(.22,.8,.24,1);
-  --spring:cubic-bezier(.3,1.32,.45,1);
+  /* motion: physical springs. snappy = UI that lives inside a track (no visible overshoot),
+     sheet = big surfaces, bouncy = small free objects that may pop. Fallbacks below for old engines. */
+  --spring:cubic-bezier(.25,1,.32,1);
+  --e-sheet:cubic-bezier(.32,.94,.36,1);
+  --e-bouncy:cubic-bezier(.34,1.3,.5,1);
   --safeB:env(safe-area-inset-bottom,0px);
   --safeT:env(safe-area-inset-top,0px);
   color-scheme:dark;
@@ -34,8 +38,8 @@ button{cursor:pointer;border:0;background:none;padding:0}
 img{display:block;max-width:100%}
 :focus-visible{outline:2px solid var(--tint);outline-offset:3px;border-radius:12px}
 .num{font-variant-numeric:tabular-nums}
-.press{transition:transform .35s var(--spring),opacity .2s}
-.press:active{transform:scale(.95)}
+.press{transition:transform .42s var(--e-bouncy),opacity .2s}
+.press:active{transform:scale(.96);transition:transform .1s cubic-bezier(.3,0,.6,1)}
 img[loading]{opacity:0;transition:opacity .45s ease}
 img.ld{opacity:1}
 
@@ -315,7 +319,11 @@ textarea::placeholder{color:var(--faint)}
 .toast{position:fixed;z-index:80;left:16px;right:16px;margin:0 auto;width:max-content;max-width:min(calc(100% - 32px),440px);bottom:calc(76px + var(--safeB));transform:translateY(calc(100% + 96px));color:var(--ink);padding:12px 18px 12px 14px;border-radius:999px;font-weight:600;font-size:15px;transition:transform .55s var(--spring);display:flex;gap:10px;align-items:center;max-width:calc(100% - 24px);background:linear-gradient(180deg,rgba(255,255,255,.16),rgba(255,255,255,.06)),rgba(40,34,28,.72)}
 .toast>span:first-child{color:var(--green)}
 .toast.in{transform:none}
-.fly{position:fixed;z-index:90;border-radius:16px;object-fit:cover;pointer-events:none;transition:transform .75s cubic-bezier(.5,-.3,.6,1),opacity .75s ease,border-radius .75s;opacity:1}
+.fly{position:fixed;z-index:90;pointer-events:none;transition:transform .62s cubic-bezier(.3,.1,.5,1)}
+.fly-i{display:block;width:100%;height:100%;border-radius:16px;object-fit:cover;transition:transform .62s cubic-bezier(.55,-.35,.75,.9),opacity .62s ease-in,border-radius .62s;box-shadow:0 10px 24px rgba(0,0,0,.45)}
+.catch{animation:catch .45s var(--e-bouncy)}
+@keyframes catch{35%{transform:scale(1.045)}}
+.dish-pop{margin-top:2px}
 
 /* wider screens: centred phone column on a soft backdrop */
 @media (min-width:700px){
@@ -589,3 +597,72 @@ select.ad-in{appearance:none;-webkit-appearance:none;background-image:linear-gra
 .fb-st>span.on{color:var(--tint)}
 .fb-st>span.on svg{fill:currentColor}
 .fb p{margin:0;font-size:15px;line-height:1.4}
+
+/* ---------- v8 motion system ---------- */
+@supports (transition-timing-function:linear(0,1)){
+  :root{
+    --spring:linear(0,0.0262,0.0909,0.1778,0.275,0.3742,0.4698,0.5584,0.6381,0.708,0.7682,0.8189,0.8611,0.8955,0.9232,0.9451,0.9621,0.9751,0.9849,0.992,0.9971,0.9992,0.9998,1);
+    --e-sheet:linear(0,0.0225,0.0786,0.1543,0.2397,0.328,0.4144,0.4959,0.5708,0.6381,0.6977,0.7496,0.7943,0.8324,0.8645,0.8913,0.9136,0.9318,0.9467,0.9588,0.9684,0.9761,0.9822,0.9869,0.9906,0.9934,0.9955,0.9971,0.9983,0.9991,0.9997,1);
+    --e-bouncy:linear(0,0.0451,0.156,0.3018,0.4587,0.6098,0.7441,0.8559,0.9432,1.0065,1.0485,1.0726,1.0826,1.0823,1.0752,1.0641,1.0512,1.0382,1.0263,1.016,1.0078,1.0016,0.9973,0.9947,0.9934,0.993,0.9934,0.9942,0.9952,0.9963,0.9974,0.9983,0.9991,0.9997,1);
+  }
+}
+/* segmented controls: the pill glides inside its track, labels under it switch colour exactly where the pill is */
+.lang .knob,.seg .knob{z-index:1;pointer-events:none;transition:transform .46s var(--spring),box-shadow .3s}
+.lang .knob.moving,.seg .knob.moving{scale:none;box-shadow:inset 0 1px 0 rgba(255,255,255,.7),0 6px 18px rgba(0,0,0,.4)}
+.lang>button,.seg>button{z-index:0;color:var(--soft)!important;transition:none}
+.liq{position:absolute;inset:0;z-index:2;pointer-events:none;display:grid;padding:3px;color:var(--onTint);transition:clip-path .46s var(--spring)}
+.lang .liq{grid-auto-flow:column;grid-auto-columns:48px}
+.seg .liq{grid-template-columns:repeat(3,minmax(0,1fr))}
+.liq span{display:grid;place-items:center;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;padding:0 4px}
+.lang .liq span{font-size:13px}.seg .liq span{font-size:15px}
+.liq.now{transition:none}
+/* sheets: smooth surface, page behind steps back like iOS */
+.sheet{transition:transform .58s var(--e-sheet)}
+.sheet::after{content:"";position:absolute;left:0;right:0;top:calc(100% - 2px);height:120px;background:#1c1814}
+.guest{transition:transform .58s var(--e-sheet),border-radius .58s var(--e-sheet),filter .58s var(--e-sheet);transform-origin:50% var(--oy,50vh)}
+@media (max-width:759px){
+  body.recede .guest{transform:scale(.92) translateY(10px);filter:brightness(.7) saturate(.9)}
+  body.recede{background:#000}
+}
+.scrim{transition:opacity .45s var(--ease)}
+/* small objects pop */
+.bump{animation:bump .5s var(--e-bouncy)}
+@keyframes bump{40%{transform:scale(1.22)}}
+.stp.pop{animation:stpIn .5s var(--e-bouncy)}
+@keyframes stpIn{from{transform:scale(.7);opacity:.3}}
+.toast{transition:transform .5s var(--e-bouncy),opacity .3s}
+.stars button{transition:color .2s,transform .45s var(--e-bouncy)}
+.stars button.on{animation:starPop .45s var(--e-bouncy)}
+@keyframes starPop{40%{transform:scale(1.25)}}
+/* search: the field grows out of the magnifier, page fades under it */
+.menu{transition:opacity .22s ease,transform .32s var(--spring)}
+/* order glow for guests: one warm breath, no strobe */
+body[data-view="guest"] .glow{--c1:#f4dcae;--c2:#e3bb74;--c3:#fff1d6;--c4:#c9973f}
+body[data-view="guest"] .glow.burst{animation:gonce 1.8s var(--ease) both}
+body[data-view="guest"] .glow.k-ok{--c1:#cfeed8;--c2:#f4dcae;--c3:#9fe0b4;--c4:#e3bb74}
+@keyframes gonce{0%{opacity:0}22%{opacity:.85}100%{opacity:0}}
+@media (prefers-reduced-motion:reduce){
+  .liq,.lang .knob,.seg .knob,.sheet,.guest{transition-duration:.01ms!important}
+  body.recede .guest{transform:none;filter:brightness(.8)}
+}
+
+.search{transition:opacity .28s ease;transform:none!important;background:rgba(11,9,7,.96)}
+.search .sb{opacity:0;transform:translateY(-6px);transition:opacity .25s ease,transform .45s var(--spring)}
+.search input{clip-path:inset(0 0 0 72% round 999px);transition:clip-path .48s var(--spring)}
+.search.in .sb{opacity:1;transform:none}
+.search.in input{clip-path:inset(0 0 0 0 round 999px)}
+.search .res>*{animation:resIn .42s var(--spring) both}
+.search .s-pop>.row{animation:resIn .42s var(--spring) both}
+.search .s-pop>.row:nth-child(2){animation-delay:.03s}.search .s-pop>.row:nth-child(3){animation-delay:.06s}.search .s-pop>.row:nth-child(4){animation-delay:.09s}
+.search .s-pop>.row:nth-child(5){animation-delay:.12s}.search .s-pop>.row:nth-child(6){animation-delay:.15s}.search .s-pop>.row:nth-child(7){animation-delay:.18s}.search .s-pop>.row:nth-child(8){animation-delay:.21s}
+@keyframes resIn{from{opacity:0;transform:translateY(10px)}}
+.s-lab{margin:6px 4px 10px}
+.pop-n{margin-top:3px;font-size:12px;font-weight:600;color:var(--tint)}
+@media (prefers-reduced-motion:reduce){.search input{clip-path:none}.search .res>*,.search .s-pop>.row{animation:none}}
+.search{opacity:1!important;background:none!important;pointer-events:none}
+.search.in{pointer-events:auto}
+.search::before{content:"";position:absolute;inset:0;background:rgba(11,9,7,.97);opacity:0;transition:opacity .2s ease}
+.search.in::before{opacity:1}
+.search .sb,.search .res{position:relative;z-index:1}
+.search .res{opacity:0;transition:opacity .2s ease}
+.search.in .res{opacity:1;transition:opacity .28s ease .1s}

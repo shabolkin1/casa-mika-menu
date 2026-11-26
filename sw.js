@@ -2,7 +2,7 @@
    Pages, scripts and menu: network first, saved copy when offline.
    Photos, fonts and the Supabase library: saved copy first (they never change under the same address).
    Live data (orders, requests) is never cached. */
-var V = "cm-v7";
+var V = "cm-v8";
 var CORE = ["./", "index.html", "config.js", "img/logo.png", "img/hero-s.webp"];
 
 self.addEventListener("install", function (e) {
