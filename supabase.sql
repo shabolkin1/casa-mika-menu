@@ -1,3 +1,5 @@
+-- Already applied in Supabase. Do not run this file again: features2.sql now holds every PIN-checked function
+-- (with protection against PIN guessing). Running this file again would fail on the changed function types.
 -- Casa Mika QR ordering: database for Supabase.
 -- Paste the whole file into Supabase → SQL Editor → Run. Safe to run again.
 -- Guests (anon) can create orders and requests and read them; only staff with the PIN can change them.
@@ -120,4 +122,4 @@ end $$;
 
 -- staff PIN: change 2468 to your own 4–6 digits before running, or run this line again later with a new PIN
 insert into public.staff_settings (id, pin_hash) values (1, crypt('2468', gen_salt('bf')))
-on conflict (id) do update set pin_hash = excluded.pin_hash;
+on conflict (id) do nothing;

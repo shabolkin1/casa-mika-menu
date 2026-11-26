@@ -1,3 +1,5 @@
+-- Already applied in Supabase. Do not run this file again: features2.sql now holds every PIN-checked function
+-- (with protection against PIN guessing). Running this file again would fail on the changed function types.
 -- Casa Mika admin: menu edits and photos by the manager, with a separate manager PIN.
 -- Run once in Supabase -> SQL Editor after supabase.sql. Safe to run again.
 
@@ -69,4 +71,4 @@ do $$ begin
 end $$;
 
 -- manager PIN: 6 digits. Change 000000 before running, or change it later from the admin screen.
-update public.staff_settings set admin_hash = crypt('000000', gen_salt('bf')) where id = 1;
+update public.staff_settings set admin_hash = crypt('000000', gen_salt('bf')) where id = 1 and admin_hash is null;
