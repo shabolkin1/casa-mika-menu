@@ -453,7 +453,7 @@ img.ct{object-fit:contain!important;padding:4px;background-image:radial-gradient
 .ad-f{display:flex;flex-direction:column;gap:6px}
 .ad-f>span{font-size:14px;font-weight:600;color:var(--soft)}
 .ad-in{width:100%;min-height:48px;border:0;border-radius:14px;background:var(--card2);padding:12px 14px;font-size:16px;color:var(--ink);box-shadow:inset 0 0 0 1px rgba(255,255,255,.06);resize:vertical}
-.ad-in::placeholder{color:var(--faint)}
+.ad-in::placeholder{color:var(--soft);opacity:.75}
 .ad-in:focus{outline:none;box-shadow:inset 0 0 0 1.5px var(--tint)}
 .ad-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px}
 .ad-tabs{width:100%}
@@ -493,3 +493,27 @@ body[data-view="staff"] .toast,body[data-view="admin"] .toast{bottom:calc(24px +
 .ad-menu{display:flex;flex-direction:column;gap:8px}
 .ad-menu a,.ad-menu button{display:flex;align-items:center;gap:12px;height:56px;padding:0 16px;border-radius:16px;background:var(--card2);font-weight:600;font-size:16px;color:var(--ink);text-decoration:none;text-align:left}
 .ad-menu .danger{color:var(--red)}
+
+/* review fixes: in-row stepper, bigger touch targets, edge fades, staff states */
+.add{position:relative}
+.add::after{content:"";position:absolute;inset:-8px;border-radius:50%}
+.stp{display:flex;align-items:center;height:36px;padding:0 2px;border-radius:999px;background:var(--tint);color:var(--onTint);box-shadow:inset 0 1px 0 rgba(255,255,255,.55),0 0 0 .5px rgba(0,0,0,.4)}
+.stp button{position:relative;width:32px;height:32px;display:grid;place-items:center;border-radius:50%;color:inherit}
+.stp button::after{content:"";position:absolute;inset:-6px -2px}
+.stp .q{min-width:20px;text-align:center;font-weight:700;font-size:15px}
+.stp.pop{animation:stpIn .45s var(--spring)}
+@keyframes stpIn{from{transform:scale(.6);opacity:.4}}
+.chips,.hits,.minis,.pills.scroll{-webkit-mask-image:linear-gradient(90deg,#000 calc(100% - 28px),transparent);mask-image:linear-gradient(90deg,#000 calc(100% - 28px),transparent)}
+.tk .act.ok{background:var(--ink);color:var(--bg);display:flex;align-items:center;justify-content:center;gap:8px}
+.tk .tm.warn{background:#E8A33D;color:#1d1206}
+.tk .tm.late{background:var(--red);color:#2a0a05;animation:latePulse 1.6s ease-in-out infinite}
+@keyframes latePulse{50%{box-shadow:0 0 0 6px rgba(255,122,102,.25)}}
+.tk:has(.tm.late){box-shadow:inset 0 3px 0 var(--c),inset 0 0 0 2px var(--red)}
+.empty-s{padding:28px 4px;display:flex;flex-direction:column;align-items:flex-start;gap:6px}
+.empty-s p{margin:0;font-size:17px;font-weight:600}
+.empty-s .sub{font-size:15px;font-weight:400;color:var(--soft);margin-bottom:12px}
+.empty-s .ghost{display:inline-flex;align-items:center;gap:8px;height:46px;padding:0 18px;border-radius:999px;background:var(--card2);color:var(--ink);font-weight:600}
+.lang button{position:relative}
+.lang button::after{content:"";position:absolute;inset:-6px -2px}
+@media (prefers-reduced-motion:reduce){.tk .tm.late,.stp.pop{animation:none}}
+.toast{background:#2b241e;box-shadow:0 0 0 .5px rgba(255,255,255,.12)}

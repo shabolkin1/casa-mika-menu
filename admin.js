@@ -161,8 +161,10 @@ function editSheet(id) {
       return h("label", { class: "ad-f" }, h("span", null, a(k === "n" ? "name" : k === "d" ? "desc" : "story")), el);
     }
     function priceField(label, val, baseVal, set) {
-      var el = h("input", { class: "ad-in num", inputmode: "numeric", placeholder: String(baseVal), oninput: function (ev) { var n = parseInt(ev.target.value.replace(/\D/g, ""), 10); set(isNaN(n) ? null : n); } });
-      el.value = val ? String(val) : "";
+      var fmt = function (n) { return String(n).replace(/\B(?=(\d{3})+(?!\d))/g, "."); };
+      var el = h("input", { class: "ad-in num", inputmode: "numeric", placeholder: fmt(baseVal), oninput: function (ev) { var n = parseInt(ev.target.value.replace(/\D/g, ""), 10); set(isNaN(n) ? null : n); },
+        onblur: function (ev) { var n = parseInt(ev.target.value.replace(/\D/g, ""), 10); ev.target.value = isNaN(n) ? "" : fmt(n); } });
+      el.value = val ? fmt(val) : "";
       return h("label", { class: "ad-f" }, h("span", null, label + " · " + C.money(baseVal, "vi")), el);
     }
     var hidden = e.hide === true;

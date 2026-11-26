@@ -54,6 +54,7 @@ var ICONS = {
   search: '<svg ' + SV + '><circle cx="11" cy="11" r="7"/><path d="M20 20l-4-4"/></svg>',
   arrow: '<svg ' + SV + '><path d="M5 12h14M13 6l6 6-6 6"/></svg>',
   x: '<svg ' + SV + '><path d="M6 6l12 12M18 6L6 18"/></svg>',
+  minus: '<svg ' + SV + '><path d="M5 12h14"/></svg>',
   plus: '<svg ' + SV + ' stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>',
   check: '<svg ' + SV + ' stroke-width="2.2"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>',
   clock: '<svg ' + SV + '><circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2"/></svg>',
@@ -387,7 +388,7 @@ var PAIR_ITEM = { "bo-luc-lac": ["chiara-terra-merlot-gl", "saigon", "rau-muong"
 function groupIcon(it) { var g = SEC[it.sec].group; return g === "bar" ? (it.sec === "beer" ? "beer" : "wine") : g === "drinks" ? "cup" : "bowl"; }
 function available(id) { return BY[id] && !S.stop[id] && !BY[id].hide; }
 function pairsFor(it) {
-  var list = (PAIR_ITEM[it.id] || PAIR_SEC[it.sec] || []).filter(function (id) { return id !== it.id && available(id) && !qtyOf(id); });
+  var list = (PAIR_ITEM[it.id] || PAIR_SEC[it.sec] || []).filter(function (id) { return id !== it.id && available(id) && BY[id].img && !qtyOf(id); });
   return list.slice(0, 3).map(function (id) { return BY[id]; });
 }
 function upsellFor() {
@@ -395,7 +396,7 @@ function upsellFor() {
   var hasDrink = inCart.some(function (it) { return SEC[it.sec].group !== "food"; });
   var hasFood = inCart.some(function (it) { return SEC[it.sec].group === "food"; });
   var pool = !hasDrink ? ["tra-dao", "cf-muoi", "cam", "saigon", "dragon"] : !hasFood ? ["met", "cha-gio", "avocado-toast", "goi-cuon", "waffle"] : ["waffle-fruit", "cf-dua", "st-bo-dua", "tra-sen"];
-  return pool.filter(function (id) { return available(id) && !qtyOf(id); }).slice(0, 3).map(function (id) { return BY[id]; });
+  return pool.filter(function (id) { return available(id) && BY[id].img && !qtyOf(id); }).slice(0, 3).map(function (id) { return BY[id]; });
 }
 function quickDefault(it) { return !SPICY_SEC[it.sec]; } /* variants add as the first option: glass, shot, smallest size */
 function miniCards(list, api) {
@@ -527,9 +528,7 @@ function rowFor(it) {
   var marks = [];
   if (it.tags.indexOf("veg") >= 0) marks.push(h("span", { class: "mk veg", title: "Vegetarian", "aria-label": "Vegetarian" }, ic("leaf", 15)));
   if (it.tags.indexOf("spicy") >= 0) marks.push(h("span", { class: "mk hot", title: t("spicy"), "aria-label": t("spicy") }, ic("chili", 15)));
-  var btn = out ? h("span", { class: "soldout" }, t("out")) :
-    h("button", { class: "add press" + (q ? " has" : ""), "data-add": it.id, "aria-label": t("add") + ": " + nm(it), onclick: function (e) { e.stopPropagation(); quickAdd(it, e.currentTarget); } },
-      q ? h("span", { class: "q num" }, q) : ic("plus", 22));
+  var btn = out ? h("span", { class: "soldout" }, t("out")) : ctlFor(it);
   return h("div", { class: "row" + (it.img ? " ph" : "") + (out ? " out" : ""), role: "button", tabindex: "0", "data-row": it.id,
       onclick: function () { if (!out) openDish(it.id); }, onkeydown: function (e) { if ((e.key === "Enter" || e.key === " ") && !out) { e.preventDefault(); openDish(it.id); } } },
     it.img ? h("img", { class: "th" + (it.ct ? " ct" : ""), src: pic(it.img), alt: "", loading: "lazy", decoding: "async", style: "background-color:" + bgOf(it.img), onload: function (e) { e.target.classList.add("ld"); } }) : null,
@@ -600,12 +599,26 @@ function watchSpy() {
 function refreshCounts() {
   if (S.view !== "guest" || !menuEl) return;
   menuEl.querySelectorAll("[data-add]").forEach(function (b) {
-    var q = qtyOf(b.getAttribute("data-add")), had = b.classList.contains("has"), old = b.textContent;
-    b.classList.toggle("has", !!q);
-    b.replaceChildren(q ? h("span", { class: "q num" }, q) : ic("plus", 22));
-    if (q && (!had || old !== String(q))) { b.classList.remove("bump"); void b.offsetWidth; b.classList.add("bump"); }
+    var id = b.getAttribute("data-add"), q = qtyOf(id), old = +b.getAttribute("data-q");
+    if (q === old || !BY[id]) return;
+    var nb = ctlFor(BY[id]); b.replaceWith(nb);
+    if (q && old) { var qn = nb.querySelector(".q"); if (qn) { qn.classList.remove("bump"); void qn.offsetWidth; qn.classList.add("bump"); } }
+    else if (q) { nb.classList.add("pop"); }
   });
   renderDock();
+}
+/* add, or once added: a − n + stepper right in the row, so a mistake is undone where it was made */
+function ctlFor(it) {
+  var q = qtyOf(it.id);
+  if (!q) return h("button", { class: "add press", "data-add": it.id, "data-q": "0", "aria-label": t("add") + ": " + nm(it), onclick: function (e) { e.stopPropagation(); quickAdd(it, e.currentTarget); } }, ic("plus", 22));
+  return h("div", { class: "stp", "data-add": it.id, "data-q": String(q), role: "group", "aria-label": nm(it), onclick: function (e) { e.stopPropagation(); } },
+    h("button", { class: "press", "aria-label": "− " + nm(it), onclick: function (e) { e.stopPropagation(); minusOne(it.id); } }, ic(q === 1 ? "trash" : "minus", 17)),
+    h("span", { class: "q num", "aria-live": "polite" }, q),
+    h("button", { class: "press", "aria-label": t("add") + ": " + nm(it), onclick: function (e) { e.stopPropagation(); quickAdd(it, e.currentTarget); } }, ic("plus", 17)));
+}
+function minusOne(id) {
+  var ls = S.cart.filter(function (l) { return l.id === id; }); if (!ls.length) return;
+  var l = ls[ls.length - 1]; buzz(8); setLineQty(l.k, l.q - 1);
 }
 function quickAdd(it, btn) {
   if (it.v || SPICY_SEC[it.sec]) { openDish(it.id); return; }
@@ -834,7 +847,8 @@ function openSearch() {
       r.onclick = function () { closeSearch(); if (!S.stop[it.id]) setTimeout(function () { openDish(it.id); }, 200); };
       var b = r.querySelector("[data-add]"); if (b) b.onclick = function (e) { e.stopPropagation(); closeSearch(); setTimeout(function () { openDish(it.id); }, 200); };
       return r;
-    }) : [h("p", { class: "empty", style: "padding:24px 0" }, t("nothing"))]);
+    }) : [h("div", { class: "empty-s" }, h("p", null, t("nothing")), h("p", { class: "sub" }, t("nothingHint")),
+        h("button", { class: "ghost press", onclick: function () { closeSearch(); setTimeout(openService, 220); } }, ic("bell", 18), t("callStaff")))]);
   }
   document.body.append(searchEl); document.body.style.overflow = "hidden";
   requestAnimationFrame(function () { searchEl.classList.add("in"); input.focus(); });
@@ -927,7 +941,7 @@ function reqCard(r) {
   return h("article", { class: "tk" },
     h("div", { class: "hd" }, h("span", { class: "tb" }, st("table") + " " + r.table), timeTag(r.createdAt, 2, 4)),
     h("div", { class: "rq" }, h("span", { class: "ic" }, ic(s ? s.ic : r.kind === "bill" ? "bill" : "pen", 26)), h("b", null, label)),
-    h("button", { class: "act press", onclick: function () { Promise.resolve(Store.setReq(r.id, { status: "done" })).catch(staffErr); } }, st("done")));
+    h("button", { class: "act ok press", onclick: function () { Promise.resolve(Store.setReq(r.id, { status: "done" })).catch(staffErr); } }, ic("check", 20), st("done")));
 }
 function orderCard(o) {
   var total = o.items.reduce(function (s, x) { return s + itemPrice(BY[x.id], x.v) * x.q; }, 0);
