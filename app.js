@@ -81,6 +81,8 @@ var ICONS = {
   star: '<svg ' + SV + '><path d="M12 3.5l2.6 5.3 5.9.9-4.3 4.1 1 5.8-5.2-2.7-5.2 2.7 1-5.8-4.3-4.1 5.9-.9z"/></svg>',
   wifi: '<svg ' + SV + '><path d="M2 8.5a15 15 0 0 1 20 0"/><path d="M5.5 12a10 10 0 0 1 13 0"/><path d="M9 15.5a5 5 0 0 1 6 0"/><path d="M12 19h.01"/></svg>',
   copy: '<svg ' + SV + '><rect x="8" y="8" width="12" height="12" rx="2"/><path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2"/></svg>',
+  cocktail: '<svg ' + SV + '><path d="M5 4h14l-7 8z"/><path d="M12 12v8"/><path d="M8 20h8"/><path d="M15.5 4l2-2"/></svg>',
+  bottle: '<svg ' + SV + '><path d="M10 2h4v4l1.5 2.5V21a1 1 0 0 1-1 1h-5a1 1 0 0 1-1-1V8.5L10 6z"/><path d="M8.5 12h7"/></svg>',
   minus: '<svg ' + SV + '><path d="M5 12h14"/></svg>',
   plus: '<svg ' + SV + ' stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>',
   check: '<svg ' + SV + ' stroke-width="2.2"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>',
@@ -451,7 +453,12 @@ var PAIR_SEC = {
 var PAIR_ITEM = { "bo-luc-lac": ["chiara-terra-merlot-gl", "saigon", "rau-muong"], "bo-tieu-xanh": ["chiara-terra-merlot-gl", "saigon", "rau-muong"],
   "mix-grill": ["chiara-terra-merlot-gl", "saigon", "rau-muong"], "tom-hum": ["accomplice-chardonnay-gl", "torre-oria-sauvignon-blanc-gl", "rau-muong"],
   "bun-bo-hue": ["tra-dao", "saigon", "cam"], "met": ["saigon", "tra-dao", "sunset-crush"] };
-function groupIcon(it) { var g = SEC[it.sec].group; return g === "bar" ? (it.sec === "beer" ? "beer" : "wine") : g === "drinks" ? "cup" : "bowl"; }
+function groupIcon(it) {
+  var g = SEC[it.sec].group, s = it.sec;
+  if (g === "bar") return s === "beer" ? "beer" : s === "spirits" ? "bottle" : s === "signature" || s === "classic" ? "cocktail" : "wine";
+  if (g === "drinks") return s === "mocktail" ? "cocktail" : s === "soft" ? "bottle" : "cup";
+  return s === "veg" || s === "salad" ? "leaf" : "bowl";
+}
 /* what the café actually serves today, from live orders of the last 24 hours: honest social proof */
 function popCounts() {
   var c = {}; S.orders.forEach(function (o) { if (Date.now() - o.createdAt < 86400000) o.items.forEach(function (x) { c[x.id] = (c[x.id] || 0) + (x.q || 1); }); });
@@ -641,11 +648,14 @@ function rowFor(it) {
   if (it.tags.indexOf("veg") >= 0) marks.push(h("span", { class: "mk veg", title: "Vegetarian", "aria-label": "Vegetarian" }, ic("leaf", 15)));
   if (it.tags.indexOf("spicy") >= 0) marks.push(h("span", { class: "mk hot", title: t("spicy"), "aria-label": t("spicy") }, ic("chili", 15)));
   var btn = out ? h("span", { class: "soldout" }, t("out")) : ctlFor(it);
-  return h("div", { class: "row" + (it.img ? " ph" : "") + (out ? " out" : ""), role: "button", tabindex: "0", "data-row": it.id,
+  var full = nm(it), cut = full.lastIndexOf(" ");
+  var nameEl = marks.length ? h("div", { class: "nm" }, cut > 0 ? full.slice(0, cut + 1) : "", h("span", { class: "nw" }, cut > 0 ? full.slice(cut + 1) : full, marks)) : h("div", { class: "nm" }, full);
+  return h("div", { class: "row ph" + (out ? " out" : ""), role: "button", tabindex: "0", "data-row": it.id,
       onclick: function () { if (!out) openDish(it.id); }, onkeydown: function (e) { if ((e.key === "Enter" || e.key === " ") && !out) { e.preventDefault(); openDish(it.id); } } },
-    it.img ? h("img", { class: "th" + (it.ct ? " ct" : ""), src: pic(it.img), alt: "", loading: "lazy", decoding: "async", style: "background-color:" + bgOf(it.img), onload: function (e) { e.target.classList.add("ld"); } }) : null,
+    it.img ? h("img", { class: "th" + (it.ct ? " ct" : ""), src: pic(it.img), alt: "", loading: "lazy", decoding: "async", style: "background-color:" + bgOf(it.img), onload: function (e) { e.target.classList.add("ld"); } })
+      : h("div", { class: "th tile t-" + SEC[it.sec].group, "aria-hidden": "true" }, ic(groupIcon(it), 26)),
     h("div", { class: "tx" },
-      h("div", { class: "nm" }, nm(it), marks),
+      nameEl,
       S.lang !== "vi" && it.n.vi !== nm(it) ? h("div", { class: "vi", lang: "vi" }, it.n.vi) : null,
       h("div", { class: "pr num" }, priceLabel(it))),
     btn);

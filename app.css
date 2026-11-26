@@ -672,3 +672,10 @@ body[data-view="guest"] .glow.k-ok{--c1:#cfeed8;--c2:#f4dcae;--c3:#9fe0b4;--c4:#
 .how-ic{width:36px;height:36px;border-radius:50%;display:grid;place-items:center;background:rgba(227,187,116,.16);color:var(--tint2)}
 .how b{display:block;font-size:15px;font-weight:700;margin-bottom:2px}
 .how p{margin:0;font-size:15px;line-height:1.45;color:var(--soft)}
+
+/* rows without a photo: a quiet tile in the photo slot keeps every name on one line of alignment */
+.row .tile{display:grid;place-items:center;background:#231d18;box-shadow:inset 0 0 0 .5px rgba(244,220,174,.14);color:rgba(244,220,174,.62)}
+.row .tile.t-bar{background:#1f1a1d;color:rgba(244,220,174,.7)}
+.row .tile.t-drinks{background:#1d1f1b}
+.row.out .tile{opacity:.6}
+.nm .nw{white-space:nowrap}
