@@ -319,7 +319,7 @@ function sheet(build, opts) {
   var body = h("div", { class: "body" });
   var grab = h("div", { class: "grab", "aria-hidden": "true" }, h("i"));
   var el = h("section", { class: "sheet" + (opts.cls ? " " + opts.cls : ""), role: "dialog", "aria-modal": "true", "aria-label": opts.label || "" },
-    grab, h("button", { class: "close press", "aria-label": t("cancel"), onclick: function () { closeSheet(); } }, ic("x", 20)), body);
+    grab, h("button", { class: "close press", "aria-label": S.view === "guest" ? t("cancel") : (S.staffLang === "en" ? "Close" : "Đóng"), onclick: function () { closeSheet(); } }, ic("x", 20)), body);
   document.body.append(scrim, el);
   document.body.style.overflow = "hidden";
   var api = { el: el, body: body, kind: opts.kind, rebuild: function () { var y = body.scrollTop; var f = document.activeElement && document.activeElement.id; body.replaceChildren(); build(body, api); body.scrollTop = y; if (f) { var n = document.getElementById(f); if (n) { n.focus(); try { var L = n.value.length; n.setSelectionRange(L, L); } catch (e) {} } } } };
