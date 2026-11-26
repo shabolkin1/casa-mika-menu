@@ -9,13 +9,25 @@ var L = {
     show: "Hiện trong thực đơn", showHint: "Tắt để ẩn món khỏi trang khách", changePhoto: "Đổi ảnh", origPhoto: "Dùng ảnh gốc", name: "Tên món", desc: "Mô tả ngắn", story: "Câu chuyện về món",
     keep: "Để trống: giữ bản gốc", save: "Lưu", saving: "Đang lưu…", saved: "Đã lưu. Khách thấy ngay.", reset: "Khôi phục bản gốc", resetAsk: "Bấm lần nữa để khôi phục",
     pins: "Mã PIN", staffPin: "PIN màn hình nhân viên (4–6 số)", adminPin: "PIN quản lý (6 số)", pinSave: "Đổi mã PIN", pinSaved: "Đã đổi mã PIN", pinWrong: "PIN không hợp lệ",
-    guest: "Trang khách", staff: "Màn hình nhân viên", err: "Không lưu được, thử lại", photoBusy: "Đang xử lý ảnh…", photoOk: "Đã đổi ảnh", logout: "Thoát", more: "Thêm", empty: "Không tìm thấy món", count: "món" },
+    guest: "Trang khách", staff: "Màn hình nhân viên",
+    pay: "Thanh toán QR & Google", payHint: "Khách chọn thanh toán, thấy mã VietQR với số tiền đã điền sẵn.", bank: "Ngân hàng", pick: "Chọn ngân hàng", acct: "Số tài khoản", acctName: "Tên chủ tài khoản (không dấu)",
+    review: "Link đánh giá Google", reviewHint: "Google Maps → quán → Đánh giá → Chia sẻ. Khách hài lòng sẽ được mời để lại đánh giá.", preview: "Mã thử với 10.000 ₫", payOff: "Để trống ngân hàng để tắt QR",
+    tg: "Thông báo Telegram", tgOn: "Đã kết nối. Bot sẽ báo khi đơn chờ quá 5 phút và khi khách chấm 1–3 sao.", tgOff: "Chưa kết nối",
+    tg1: "Mở Telegram, tìm @BotFather, gửi /newbot và đặt tên bot.", tg2: "Dán mã bot (token) mà BotFather gửi:", tg3: "Mở bot vừa tạo và bấm Start.", tg4: "Kết nối",
+    tgBusy: "Đang kết nối…", tgNoMsg: "Chưa thấy tin nhắn. Mở bot, bấm Start rồi thử lại.", tgBadTok: "Mã bot không đúng", tgDone: "Đã kết nối. Kiểm tra tin nhắn thử trong Telegram.", tgTest: "Casa Mika: thông báo đã được bật.", tgCut: "Ngắt kết nối",
+    fb: "Đánh giá của khách", fbNone: "Chưa có đánh giá", fbAvg: "Trung bình", fbTable: "Bàn", err: "Không lưu được, thử lại", photoBusy: "Đang xử lý ảnh…", photoOk: "Đã đổi ảnh", logout: "Thoát", more: "Thêm", empty: "Không tìm thấy món", count: "món" },
   en: { title: "Menu manager", pinHint: "Enter the manager PIN (6 digits)", pinBad: "Wrong PIN, try again", needLive: "The menu manager needs an internet connection.",
     search: "Find a dish", all: "All", edited: "Edited", hidden: "Hidden", out: "Sold out", inStock: "Available", price: "Price", from: "from",
     show: "Show on the menu", showHint: "Turn off to hide the dish from guests", changePhoto: "Change photo", origPhoto: "Use original photo", name: "Name", desc: "Short description", story: "Story of the dish",
     keep: "Empty: keep the original", save: "Save", saving: "Saving…", saved: "Saved. Guests see it right away.", reset: "Restore original", resetAsk: "Tap again to restore",
     pins: "PINs", staffPin: "Staff screen PIN (4–6 digits)", adminPin: "Manager PIN (6 digits)", pinSave: "Change PINs", pinSaved: "PINs changed", pinWrong: "Invalid PIN",
-    guest: "Guest page", staff: "Staff screen", err: "Could not save, try again", photoBusy: "Processing photo…", photoOk: "Photo changed", logout: "Log out", more: "More", empty: "No dishes found", count: "dishes" }
+    guest: "Guest page", staff: "Staff screen",
+    pay: "QR payment & Google", payHint: "Guests choose to pay and see a VietQR code with the amount filled in.", bank: "Bank", pick: "Choose a bank", acct: "Account number", acctName: "Account holder (no accents)",
+    review: "Google review link", reviewHint: "Google Maps → the café → Reviews → Share. Happy guests are invited to leave a review.", preview: "Test code for 10,000 ₫", payOff: "Leave the bank empty to turn QR off",
+    tg: "Telegram alerts", tgOn: "Connected. The bot writes when an order waits over 5 minutes and when a guest gives 1–3 stars.", tgOff: "Not connected",
+    tg1: "Open Telegram, find @BotFather, send /newbot and name the bot.", tg2: "Paste the bot token that BotFather sends:", tg3: "Open your new bot and press Start.", tg4: "Connect",
+    tgBusy: "Connecting…", tgNoMsg: "No message yet. Open the bot, press Start, then try again.", tgBadTok: "Wrong bot token", tgDone: "Connected. Check the test message in Telegram.", tgTest: "Casa Mika: alerts are on.", tgCut: "Disconnect",
+    fb: "Guest ratings", fbNone: "No ratings yet", fbAvg: "Average", fbTable: "Table", err: "Could not save, try again", photoBusy: "Processing photo…", photoOk: "Photo changed", logout: "Log out", more: "More", empty: "No dishes found", count: "dishes" }
 };
 var lang = C.load("cm-staff-lang", "vi") === "en" ? "en" : "vi";
 function a(k) { return L[lang][k] || L.en[k] || k; }
@@ -222,6 +234,9 @@ function moreSheet() {
   C.sheet(function (body) {
     C.fill(body, h("div", { class: "s-title" }, h("h2", null, a("title"))),
       h("div", { class: "ad-menu" },
+        h("button", { onclick: function () { C.closeSheet(true); setTimeout(feedbackSheet, 200); } }, ic("star", 22), a("fb")),
+        h("button", { onclick: function () { C.closeSheet(true); setTimeout(paySheet, 200); } }, ic("bill", 22), a("pay")),
+        h("button", { onclick: function () { C.closeSheet(true); setTimeout(tgSheet, 200); } }, ic("bell", 22), a("tg")),
         h("a", { href: "#bar", onclick: function () { C.closeSheet(true); } }, ic("bell", 22), a("staff")),
         h("a", { href: "#table-1", onclick: function () { C.closeSheet(true); } }, ic("cup", 22), a("guest")),
         h("button", { class: "danger", onclick: function () { C.closeSheet(true); C.save("cm-admin-pin", ""); open(); } }, ic("door", 22), a("logout"))));
@@ -241,6 +256,91 @@ function pinsSheet() {
         Store.adminSetPins(v.s, v.a).then(function () { if (v.a) C.save("cm-admin-pin", v.a); C.toast(a("pinSaved")); C.closeSheet(); }, fail);
       } }, h("span", null, a("pinSave")))));
   }, { label: a("pins"), kind: "admin" });
+}
+
+/* ---------- bank QR + Google review ---------- */
+var BANKS = [["Vietcombank", "970436"], ["VietinBank", "970415"], ["BIDV", "970418"], ["Agribank", "970405"], ["Techcombank", "970407"], ["MB Bank", "970422"], ["ACB", "970416"],
+  ["VPBank", "970432"], ["TPBank", "970423"], ["Sacombank", "970403"], ["VIB", "970441"], ["HDBank", "970437"], ["SHB", "970443"], ["OCB", "970448"], ["MSB", "970426"],
+  ["SeABank", "970440"], ["Eximbank", "970431"], ["LPBank", "970449"], ["Nam A Bank", "970428"], ["Bac A Bank", "970409"], ["KienlongBank", "970452"], ["ABBANK", "970425"],
+  ["PVcomBank", "970412"], ["VietBank", "970433"], ["BVBank", "970454"], ["Cake", "546034"], ["Timo", "963388"]];
+function noAccent(x) { return String(x || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/đ/g, "d").replace(/Đ/g, "D").toUpperCase().replace(/[^A-Z0-9 ]/g, "").replace(/\s+/g, " ").slice(0, 50); }
+function paySheet() {
+  var c = Object.assign({ bank: "", acct: "", name: "", review: "" }, S.cfg || {});
+  C.sheet(function (body, api) {
+    var ok = /^\d{6}$/.test(c.bank) && /^[0-9A-Za-z]{4,30}$/.test(c.acct);
+    var sel = h("select", { class: "ad-in", onchange: function (e) { c.bank = e.target.value; var b = BANKS.find(function (x) { return x[1] === c.bank; }); c.bankName = b ? b[0] : ""; api.rebuild(); } },
+      [h("option", { value: "" }, a("pick"))].concat(BANKS.map(function (b) { var o = h("option", { value: b[1] }, b[0]); if (b[1] === c.bank) o.selected = true; return o; })));
+    function inp(k, extra) {
+      var el = h("input", Object.assign({ class: "ad-in", autocomplete: "off", oninput: function (e) { c[k] = k === "acct" ? e.target.value.replace(/\s/g, "") : e.target.value; if (k === "acct") { clearTimeout(api.tm); api.tm = setTimeout(api.rebuild, 600); } },
+        onblur: function (e) { if (k === "name") { c.name = noAccent(c.name); e.target.value = c.name; } } }, extra || {}));
+      el.value = c[k] || ""; return el;
+    }
+    C.fill(body,
+      h("div", { class: "s-title" }, h("h2", null, a("pay")), h("p", null, a("payHint"))),
+      h("label", { class: "ad-f" }, h("span", null, a("bank")), sel),
+      h("label", { class: "ad-f" }, h("span", null, a("acct")), inp("acct", { inputmode: "numeric" })),
+      h("label", { class: "ad-f" }, h("span", null, a("acctName")), inp("name", { autocapitalize: "characters" })),
+      ok ? h("div", { class: "ad-qr" }, h("img", { src: "https://img.vietqr.io/image/" + c.bank + "-" + c.acct + "-compact2.png?amount=10000&addInfo=Test" + (c.name ? "&accountName=" + encodeURIComponent(noAccent(c.name)) : ""), alt: "VietQR", width: "200" }), h("small", null, a("preview"))) : h("p", { class: "ad-note" }, a("payOff")),
+      h("label", { class: "ad-f" }, h("span", null, a("review")), inp("review", { type: "url", inputmode: "url", placeholder: "https://g.page/r/…" })),
+      h("p", { class: "ad-note" }, a("reviewHint")),
+      h("div", { class: "buy" }, h("button", { class: "go press", disabled: api.busy, onclick: function () {
+        var d = {};
+        if (/^\d{6}$/.test(c.bank) && /^[0-9A-Za-z]{4,30}$/.test(c.acct)) { d.bank = c.bank; d.acct = c.acct; d.name = noAccent(c.name); d.bankName = c.bankName || ((BANKS.find(function (x) { return x[1] === c.bank; }) || [""])[0]); }
+        var r = (c.review || "").trim(); if (/^https:\/\/\S{8,300}$/.test(r)) d.review = r;
+        api.busy = true; api.rebuild();
+        Store.adminSetSettings(d).then(function () { C.toast(a("saved")); C.closeSheet(); }, function (e) { api.busy = false; api.rebuild(); fail(e); });
+      } }, h("span", null, api.busy ? a("saving") : a("save")))));
+  }, { label: a("pay"), kind: "admin" });
+}
+
+/* ---------- Telegram: the owner makes a bot, presses Start, we find the chat and keep the token on the server ---------- */
+function tgSheet() {
+  var v = { tok: "", on: null, busy: false, msg: "" };
+  Store.adminTelegramOn().then(function (x) { v.on = !!x; if (C.openSheet && C.openSheet.kind === "admin") C.openSheet.rebuild(); }, function () {});
+  C.sheet(function (body, api) {
+    function connect() {
+      var tok = v.tok.trim();
+      if (!/^\d{5,12}:[A-Za-z0-9_-]{30,50}$/.test(tok)) { v.msg = a("tgBadTok"); api.rebuild(); return; }
+      v.busy = true; v.msg = ""; api.rebuild();
+      fetch("https://api.telegram.org/bot" + tok + "/getUpdates").then(function (r) { return r.json(); }).then(function (j) {
+        if (!j.ok) throw new Error("tok");
+        var u = (j.result || []).slice().reverse().find(function (x) { return x.message && x.message.chat; });
+        if (!u) throw new Error("nomsg");
+        var chat = String(u.message.chat.id);
+        return Store.adminSetTelegram(tok, chat).then(function () {
+          return fetch("https://api.telegram.org/bot" + tok + "/sendMessage", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ chat_id: chat, text: a("tgTest") }) });
+        });
+      }).then(function () { v.busy = false; v.on = true; v.tok = ""; C.toast(a("tgDone")); api.rebuild(); }, function (e) {
+        v.busy = false; v.msg = e && e.message === "nomsg" ? a("tgNoMsg") : e && e.message === "tok" ? a("tgBadTok") : a("err"); api.rebuild();
+      });
+    }
+    var tokIn = h("input", { class: "ad-in", autocomplete: "off", spellcheck: "false", placeholder: "123456789:AA…", oninput: function (e) { v.tok = e.target.value; } }); tokIn.value = v.tok;
+    C.fill(body,
+      h("div", { class: "s-title" }, h("h2", null, a("tg")), h("p", null, v.on === null ? "…" : v.on ? a("tgOn") : a("tgOff"))),
+      v.on ? h("button", { class: "ad-reset", onclick: function () { Store.adminSetTelegram("", "").then(function () { v.on = false; api.rebuild(); }, fail); } }, a("tgCut"))
+        : h("ol", { class: "ad-steps" }, h("li", null, a("tg1")), h("li", null, a("tg2"), tokIn), h("li", null, a("tg3"))),
+      v.msg ? h("p", { class: "err", role: "alert" }, v.msg) : null,
+      v.on ? null : h("div", { class: "buy" }, h("button", { class: "go press", disabled: v.busy, onclick: connect }, h("span", null, v.busy ? a("tgBusy") : a("tg4")))));
+  }, { label: a("tg"), kind: "admin" });
+}
+
+/* ---------- ratings from guests ---------- */
+function feedbackSheet() {
+  var v = { list: null };
+  Store.adminFeedback().then(function (x) { v.list = x || []; if (C.openSheet && C.openSheet.kind === "admin") C.openSheet.rebuild(); }, function (e) { v.list = []; fail(e); });
+  C.sheet(function (body) {
+    var list = v.list || [], avg = list.length ? list.reduce(function (s, f) { return s + f.rating; }, 0) / list.length : 0;
+    function when(t) { var d = new Date(t); return String(d.getDate()).padStart(2, "0") + "." + String(d.getMonth() + 1).padStart(2, "0") + " " + String(d.getHours()).padStart(2, "0") + ":" + String(d.getMinutes()).padStart(2, "0"); }
+    C.fill(body,
+      h("div", { class: "s-title" }, h("h2", null, a("fb")), list.length ? h("p", null, a("fbAvg") + " " + avg.toFixed(1) + " / 5 · " + list.length) : null),
+      v.list === null ? h("p", { class: "ad-note" }, "…") : !list.length ? h("p", { class: "ad-note" }, a("fbNone")) :
+        h("div", { class: "fb-list" }, list.map(function (f) {
+          return h("div", { class: "fb" + (f.rating <= 3 ? " low" : "") },
+            h("div", { class: "fb-hd" }, h("span", { class: "fb-st", "aria-label": f.rating + "/5" }, [1, 2, 3, 4, 5].map(function (n) { var x = ic("star", 14); if (n <= f.rating) x.className = "on"; return x; })),
+              h("span", null, a("fbTable") + " " + f.table_no + " · " + when(f.created_at) + " · " + String(f.lang).toUpperCase())),
+            f.comment ? h("p", null, f.comment) : null);
+        })));
+  }, { label: a("fb"), kind: "admin" });
 }
 
 window.CM_ADMIN = { open: open, refresh: function () { if (C.openSheet && C.openSheet.kind === "admin") return; if (listEl && document.body.contains(listEl)) drawList(); } };

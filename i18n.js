@@ -135,3 +135,46 @@ window.CM_STAFF = {
   };
   Object.keys(add).forEach(function (l) { Object.assign(T[l], add[l]); });
 })(window.CM_T);
+
+/* v7: offline queue, bill by bank QR, feedback */
+(function (T, B, ST) {
+  var add = {
+    ru: { queuedToast: "Нет сети. Заказ сохранён и уйдёт сам, когда связь вернётся", st_queued: "Отправляем", stLong_queued: "Ждём сеть, заказ сохранён в телефоне",
+      failedOrd: "Заказ так и не ушёл. Позовите персонал", retry: "Отправить снова", offline: "Нет интернета. Меню работает, заказ отправим, когда сеть вернётся.",
+      billTotal: "К оплате", billMine: "Заказы с этого телефона", billEmpty: "С этого телефона заказов пока не было",
+      qrScan: "Отсканируйте в приложении банка, сумма уже вписана", qrPaid: "Оплачено, сообщить персоналу", qrTo: "Получатель", copy: "Скопировать", copied: "Скопировано",
+      qrPaidToast: "Персонал проверит перевод", qrAsk: "Перевод по QR",
+      rateQ: "Как вам?", rateSub: "Одно касание, оценку видит управляющий", rateBadQ: "Что пошло не так?", ratePh: "Пара слов, если не сложно",
+      rateSend: "Отправить", rateThanks: "Спасибо!", rateGoogle: "Оставить отзыв в Google", rateGoogleSub: "Кафе это очень поможет",
+      rateBadThanks: "Спасибо, управляющий уже видит", later: "Не сейчас" },
+    en: { queuedToast: "No connection. Your order is saved and will go out once you're back online", st_queued: "Sending", stLong_queued: "Waiting for network, order saved on this phone",
+      failedOrd: "The order never went through. Please call the staff", retry: "Send again", offline: "No internet. The menu works; we'll send your order when the network is back.",
+      billTotal: "To pay", billMine: "Orders from this phone", billEmpty: "No orders from this phone yet",
+      qrScan: "Scan in your banking app, the amount is filled in", qrPaid: "Paid, tell the staff", qrTo: "Recipient", copy: "Copy", copied: "Copied",
+      qrPaidToast: "Staff will check the transfer", qrAsk: "Pay by QR",
+      rateQ: "How was it?", rateSub: "One tap, the manager sees your rating", rateBadQ: "What went wrong?", ratePh: "A few words, if you like",
+      rateSend: "Send", rateThanks: "Thank you!", rateGoogle: "Leave a Google review", rateGoogleSub: "It really helps the café",
+      rateBadThanks: "Thanks, the manager can see it now", later: "Not now" },
+    vi: { queuedToast: "Mất mạng. Đơn đã được lưu và sẽ tự gửi khi có mạng", st_queued: "Đang gửi", stLong_queued: "Đang chờ mạng, đơn đã lưu trong điện thoại",
+      failedOrd: "Đơn chưa gửi được. Vui lòng gọi nhân viên", retry: "Gửi lại", offline: "Không có mạng. Thực đơn vẫn xem được, đơn sẽ gửi khi có mạng.",
+      billTotal: "Cần thanh toán", billMine: "Đơn từ điện thoại này", billEmpty: "Chưa có đơn nào từ điện thoại này",
+      qrScan: "Quét bằng ứng dụng ngân hàng, số tiền đã điền sẵn", qrPaid: "Đã chuyển, báo nhân viên", qrTo: "Người nhận", copy: "Sao chép", copied: "Đã sao chép",
+      qrPaidToast: "Nhân viên sẽ kiểm tra chuyển khoản", qrAsk: "Chuyển khoản QR",
+      rateQ: "Món ăn thế nào?", rateSub: "Một chạm, quản lý sẽ thấy đánh giá", rateBadQ: "Có gì chưa ổn?", ratePh: "Vài lời góp ý nếu bạn muốn",
+      rateSend: "Gửi", rateThanks: "Cảm ơn bạn!", rateGoogle: "Đánh giá trên Google", rateGoogleSub: "Điều đó giúp quán rất nhiều",
+      rateBadThanks: "Cảm ơn, quản lý đã nhận được", later: "Để sau" },
+    ko: { queuedToast: "연결이 없습니다. 주문이 저장되었고 연결되면 자동으로 전송됩니다", st_queued: "전송 중", stLong_queued: "네트워크 대기 중, 주문이 휴대폰에 저장됨",
+      failedOrd: "주문이 전송되지 않았습니다. 직원을 불러 주세요", retry: "다시 보내기", offline: "인터넷이 없습니다. 메뉴는 볼 수 있고 연결되면 주문을 보냅니다.",
+      billTotal: "결제 금액", billMine: "이 휴대폰으로 한 주문", billEmpty: "이 휴대폰으로 한 주문이 아직 없습니다",
+      qrScan: "은행 앱으로 스캔하세요. 금액이 입력되어 있습니다", qrPaid: "송금 완료, 직원에게 알리기", qrTo: "받는 사람", copy: "복사", copied: "복사됨",
+      qrPaidToast: "직원이 송금을 확인합니다", qrAsk: "QR 송금",
+      rateQ: "어떠셨나요?", rateSub: "한 번만 누르세요. 매니저가 평가를 봅니다", rateBadQ: "어떤 점이 아쉬웠나요?", ratePh: "괜찮다면 몇 마디 남겨 주세요",
+      rateSend: "보내기", rateThanks: "감사합니다!", rateGoogle: "Google 리뷰 남기기", rateGoogleSub: "카페에 큰 도움이 됩니다",
+      rateBadThanks: "감사합니다. 매니저에게 전달되었습니다", later: "나중에" }
+  };
+  Object.keys(add).forEach(function (l) { Object.assign(T[l], add[l]); });
+  B.qrpaid = { vi: "Đã chuyển QR, kiểm tra tiền", ru: "перевёл по QR", en: "paid by QR, check the bank", ko: "QR 송금 완료" };
+  Object.assign(ST.vi, { offline: "Mất kết nối với máy chủ. Đơn mới có thể chưa hiện. Đang thử lại…", back: "Đã kết nối lại" });
+  Object.assign(ST.en, { offline: "No connection to the server. New orders may not show yet. Retrying…", back: "Back online" });
+  if (ST.ru) Object.assign(ST.ru, { offline: "Нет связи с сервером. Новые заказы могут не появиться. Переподключаемся…", back: "Связь восстановлена" });
+})(window.CM_T, window.CM_BILL, window.CM_STAFF);
