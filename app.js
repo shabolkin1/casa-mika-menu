@@ -327,6 +327,7 @@ function sheet(build, opts) {
   document.body.style.overflow = "hidden";
   var api = { el: el, body: body, kind: opts.kind, rebuild: function () { var y = body.scrollTop; var f = document.activeElement && document.activeElement.id; body.replaceChildren(); build(body, api); body.scrollTop = y; if (f) { var n = document.getElementById(f); if (n) { n.focus(); try { var L = n.value.length; n.setSelectionRange(L, L); } catch (e) {} } } } };
   openSheet = api;
+  if (toastEl && toastEl.classList.contains("in")) toastEl.classList.add("top");
   build(body, api);
   requestAnimationFrame(function () { requestAnimationFrame(function () { scrim.classList.add("in"); el.classList.add("in"); }); });
   /* drag down to close */
@@ -913,6 +914,7 @@ function renderStaff() {
   var board = h("div", { class: "lanes" },
     lane("req", st("req"), reqs, reqCard), lane("new", st("new"), lanes.new, orderCard), lane("accepted", st("accepted"), lanes.accepted, orderCard), lane("served", st("served"), lanes.served, orderCard));
   document.getElementById("app").replaceChildren(h("div", { class: "staff" }, head, notice, board));
+  staffGlow(null);
 }
 function timeTag(ts, warnAt, lateAt) {
   var m = mins(ts);
