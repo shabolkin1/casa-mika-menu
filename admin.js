@@ -9,13 +9,13 @@ var L = {
     show: "Hiện trong thực đơn", showHint: "Tắt để ẩn món khỏi trang khách", changePhoto: "Đổi ảnh", origPhoto: "Dùng ảnh gốc", name: "Tên món", desc: "Mô tả ngắn", story: "Câu chuyện về món",
     keep: "Để trống: giữ bản gốc", save: "Lưu", saving: "Đang lưu…", saved: "Đã lưu. Khách thấy ngay.", reset: "Khôi phục bản gốc", resetAsk: "Bấm lần nữa để khôi phục",
     pins: "Mã PIN", staffPin: "PIN màn hình nhân viên (4–6 số)", adminPin: "PIN quản lý (6 số)", pinSave: "Đổi mã PIN", pinSaved: "Đã đổi mã PIN", pinWrong: "PIN không hợp lệ",
-    guest: "Trang khách", staff: "Màn hình nhân viên", err: "Không lưu được, thử lại", photoBusy: "Đang xử lý ảnh…", photoOk: "Đã đổi ảnh", logout: "Thoát", empty: "Không tìm thấy món", count: "món" },
+    guest: "Trang khách", staff: "Màn hình nhân viên", err: "Không lưu được, thử lại", photoBusy: "Đang xử lý ảnh…", photoOk: "Đã đổi ảnh", logout: "Thoát", more: "Thêm", empty: "Không tìm thấy món", count: "món" },
   en: { title: "Menu manager", pinHint: "Enter the manager PIN (6 digits)", pinBad: "Wrong PIN, try again", needLive: "The menu manager needs an internet connection.",
     search: "Find a dish", all: "All", edited: "Edited", hidden: "Hidden", out: "Sold out", inStock: "Available", price: "Price", from: "from",
     show: "Show on the menu", showHint: "Turn off to hide the dish from guests", changePhoto: "Change photo", origPhoto: "Use original photo", name: "Name", desc: "Short description", story: "Story of the dish",
     keep: "Empty: keep the original", save: "Save", saving: "Saving…", saved: "Saved. Guests see it right away.", reset: "Restore original", resetAsk: "Tap again to restore",
     pins: "PINs", staffPin: "Staff screen PIN (4–6 digits)", adminPin: "Manager PIN (6 digits)", pinSave: "Change PINs", pinSaved: "PINs changed", pinWrong: "Invalid PIN",
-    guest: "Guest page", staff: "Staff screen", err: "Could not save, try again", photoBusy: "Processing photo…", photoOk: "Photo changed", logout: "Log out", empty: "No dishes found", count: "dishes" }
+    guest: "Guest page", staff: "Staff screen", err: "Could not save, try again", photoBusy: "Processing photo…", photoOk: "Photo changed", logout: "Log out", more: "More", empty: "No dishes found", count: "dishes" }
 };
 var lang = C.load("cm-staff-lang", "vi") === "en" ? "en" : "vi";
 function a(k) { return L[lang][k] || L.en[k] || k; }
@@ -27,7 +27,7 @@ function priceText(it) { return (it.v ? a("from") + " " : "") + C.money(it.p, "v
 function edited(id) { return !!(C.EDITS[id] && Object.keys(C.EDITS[id]).length) || !!C.PHOTO_IDS[id]; }
 function langToggle(onchange) {
   return h("div", { class: "lang", role: "group", style: "grid-auto-columns:48px" }, h("span", { class: "knob", style: "width:48px;transform:translateX(" + (lang === "en" ? 100 : 0) + "%)" }),
-    ["vi", "en"].map(function (l) { return h("button", { "aria-pressed": String(lang === l), onclick: function () { lang = l; C.save("cm-staff-lang", l); S.staffLang = l; onchange(); } }, l === "vi" ? "Việt" : "Eng"); }));
+    ["vi", "en"].map(function (l, i) { return h("button", { "aria-pressed": String(lang === l), onclick: function (e) { if (lang === l) return; C.slideKnob(e.currentTarget.parentElement, i, function () { lang = l; C.save("cm-staff-lang", l); S.staffLang = l; onchange(); }); } }, l === "vi" ? "Việt" : "Eng"); }));
 }
 
 /* ---------- PIN ---------- */
@@ -64,10 +64,10 @@ function open() {
   if (!Store.live() || !C.load("cm-admin-pin", "")) { app.replaceChildren(pinScreen()); return; }
   var M = C.M;
   var seg = h("div", { class: "seg", role: "group" }, h("span", { class: "knob", style: "transform:translateX(" + (["food", "drinks", "bar"].indexOf(st.group) * 100) + "%)" }),
-    ["food", "drinks", "bar"].map(function (g) { var gr = M.groups.find(function (x) { return x.id === g; }); return h("button", { "aria-pressed": String(st.group === g), onclick: function () { st.group = g; open(); } }, gr.n[lang] || gr.n.en); }));
+    ["food", "drinks", "bar"].map(function (g, i) { var gr = M.groups.find(function (x) { return x.id === g; }); return h("button", { "aria-pressed": String(st.group === g), onclick: function (e) { if (st.group === g) return; st.group = g; C.slideKnob(e.currentTarget.parentElement, i); listEl.classList.add("swap"); setTimeout(function () { drawList(); listEl.classList.remove("swap"); window.scrollTo(0, 0); }, 200); } }, gr.n[lang] || gr.n.en); }));
   var search = h("input", { type: "search", value: st.q, placeholder: a("search"), "aria-label": a("search"), oninput: function (e) { st.q = e.target.value; drawList(); } });
   var filters = h("div", { class: "ad-filters" }, ["all", "edited", "hidden", "out"].map(function (f) {
-    return h("button", { class: "pill press", "aria-pressed": String(st.filter === f), onclick: function () { st.filter = f; open(); } }, a(f));
+    return h("button", { class: "pill press", "aria-pressed": String(st.filter === f), onclick: function (e) { st.filter = f; e.currentTarget.parentElement.querySelectorAll("button").forEach(function (x) { x.setAttribute("aria-pressed", String(x === e.currentTarget)); }); drawList(); } }, a(f));
   }));
   listEl = h("div", { class: "ad-list" });
   root = h("div", { class: "admin" },
@@ -75,8 +75,7 @@ function open() {
       h("div", { class: "s-id" }, h("img", { src: "img/logo.png", alt: "Casa Mika" }), h("h1", null, a("title"))),
       h("div", { class: "s-tools" }, langToggle(open),
         h("button", { class: "press", onclick: pinsSheet }, ic("pen", 20), a("pins")),
-        h("a", { href: "#bar" }, a("staff")), h("a", { href: "#table-1" }, a("guest")),
-        h("button", { class: "press", onclick: function () { C.save("cm-admin-pin", ""); open(); } }, a("logout")))),
+        h("button", { class: "press", "aria-label": a("more"), onclick: moreSheet }, ic("dots", 22)))),
     h("div", { class: "ad-bar" }, h("div", { class: "bar-row", style: "padding:0" }, seg), search, filters),
     listEl);
   app.replaceChildren(root);
@@ -189,7 +188,7 @@ function editSheet(id) {
         return priceField(v.n[lang] || v.n.en, e.vp && e.vp[i], v.p, function (n) { e.vp = e.vp || []; e.vp[i] = n; });
       })) : priceField(a("price"), e.p, base.p, function (n) { if (n) e.p = n; else delete e.p; }),
       h("div", { class: "lang ad-tabs", role: "group", style: "grid-auto-columns:minmax(0,1fr)" }, h("span", { class: "knob", style: "width:calc((100% - 6px)/4);transform:translateX(" + (C.LANGS.indexOf(tab) * 100) + "%)" }),
-        C.LANGS.map(function (l) { return h("button", { "aria-pressed": String(tab === l), onclick: function () { tab = l; api.rebuild(); } }, C.LANG_LABEL[l]); })),
+        C.LANGS.map(function (l, i) { return h("button", { "aria-pressed": String(tab === l), onclick: function (e) { if (tab === l) return; C.slideKnob(e.currentTarget.parentElement, i, function () { tab = l; api.rebuild(); }); } }, C.LANG_LABEL[l]); })),
       field("n"), field("d"), field("s", true),
       h("div", { class: "buy" }, h("div", { class: "buy-col" },
         h("button", { class: "go press", disabled: api.busy, onclick: function () {
@@ -215,6 +214,16 @@ function clean(e, base) {
   });
   if (e.ph && C.PHOTO_IDS) out.ph = e.ph;
   return out;
+}
+
+function moreSheet() {
+  C.sheet(function (body) {
+    C.fill(body, h("div", { class: "s-title" }, h("h2", null, a("title"))),
+      h("div", { class: "ad-menu" },
+        h("a", { href: "#bar", onclick: function () { C.closeSheet(true); } }, ic("bell", 22), a("staff")),
+        h("a", { href: "#table-1", onclick: function () { C.closeSheet(true); } }, ic("cup", 22), a("guest")),
+        h("button", { class: "danger", onclick: function () { C.closeSheet(true); C.save("cm-admin-pin", ""); open(); } }, ic("door", 22), a("logout"))));
+  }, { label: a("title"), kind: "admin" });
 }
 
 /* ---------- PINs ---------- */

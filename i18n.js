@@ -124,11 +124,11 @@ window.CM_STAFF = {
 /* compact header, time-of-day picks, repeat order */
 (function (T) {
   var add = {
-    ru: { tagline: "Заказ прямо к столу, оплата официанту", now_morning: "Утром берут", now_day: "На обед", now_evening: "На вечер",
+    ru: { tagline: "Заказ к столу, оплата официанту", now_morning: "Утром берут", now_day: "На обед", now_evening: "На вечер",
       repeat: "Повторить прошлый заказ", again: "Ещё по одной?", repeatBtn: "Повторить", more: "Читать дальше", addNote: "Комментарий" },
-    en: { tagline: "Order to your table, pay the waiter", now_morning: "Good in the morning", now_day: "For lunch", now_evening: "For the evening",
+    en: { tagline: "Order here, pay the waiter", now_morning: "Good in the morning", now_day: "For lunch", now_evening: "For the evening",
       repeat: "Same as last time?", again: "Another round?", repeatBtn: "Repeat", more: "Read more", addNote: "Add a note" },
-    vi: { tagline: "Gọi món tại bàn, thanh toán với nhân viên", now_morning: "Buổi sáng hay gọi", now_day: "Cho bữa trưa", now_evening: "Cho buổi tối",
+    vi: { tagline: "Gọi món tại bàn, trả tiền nhân viên", now_morning: "Buổi sáng hay gọi", now_day: "Cho bữa trưa", now_evening: "Cho buổi tối",
       repeat: "Gọi lại như lần trước?", again: "Thêm một ly nữa?", repeatBtn: "Gọi lại", more: "Xem thêm", addNote: "Ghi chú" },
     ko: { tagline: "자리에서 주문, 결제는 직원에게", now_morning: "아침에 인기", now_day: "점심 추천", now_evening: "저녁 추천",
       repeat: "지난번과 같은 주문?", again: "한 잔 더?", repeatBtn: "다시 담기", more: "더 보기", addNote: "메모" }

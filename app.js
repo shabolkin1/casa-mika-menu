@@ -64,7 +64,9 @@ var ICONS = {
   cup: '<svg ' + SV + '><path d="M5 9h12v5a5 5 0 0 1-5 5h-2a5 5 0 0 1-5-5z"/><path d="M17 11h1.5a2.5 2.5 0 0 1 0 5H17"/><path d="M9 3v3M13 3v3"/></svg>',
   bowl: '<svg ' + SV + '><path d="M3 11h18a9 9 0 0 1-18 0z"/><path d="M8 20h8"/><path d="M9 7c0-1.5 1.5-1.5 1.5-3M14 7c0-1.5 1.5-1.5 1.5-3"/></svg>',
   beer: '<svg ' + SV + '><path d="M6 7h10v12a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2z"/><path d="M16 10h2a2 2 0 0 1 2 2v3a2 2 0 0 1-2 2h-2"/><path d="M6 7a3 3 0 0 1 5-2 3 3 0 0 1 5 2"/></svg>',
-  trash: '<svg ' + SV + '><path d="M4 7h16M10 11v6M14 11v6"/><path d="M6 7l1 13h10l1-13M9 7V4h6v3"/></svg>'
+  trash: '<svg ' + SV + '><path d="M4 7h16M10 11v6M14 11v6"/><path d="M6 7l1 13h10l1-13M9 7V4h6v3"/></svg>',
+  dots: '<svg ' + SV + ' stroke-width="2.4"><path d="M6 12h.01M12 12h.01M18 12h.01"/></svg>',
+  door: '<svg ' + SV + '><path d="M14 4h5v16h-5"/><path d="M10 8l-4 4 4 4M6 12h9"/></svg>'
 };
 
 /* ---------- state ---------- */
@@ -287,7 +289,7 @@ function loadAdmin() {
   if (window.CM_ADMIN) { window.CM_ADMIN.open(); return; }
   var s = document.createElement("script"); s.src = "admin.js?v=" + (window.CM_VER || 1); s.onload = function () { window.CM_ADMIN.open(); }; document.body.append(s);
 }
-window.CM = { h: h, add: add, ic: ic, fill: fill, sheet: sheet, closeSheet: closeSheet, toast: toast, buzz: buzz, load: load, save: save, pic: pic, bgOf: bgOf, money: money,
+window.CM = { slideKnob: slideKnob, reduced: reduced, h: h, add: add, ic: ic, fill: fill, sheet: sheet, closeSheet: closeSheet, toast: toast, buzz: buzz, load: load, save: save, pic: pic, bgOf: bgOf, money: money,
   get M() { return M; }, BY: BY, SEC: SEC, S: S, BASE: BASE, EDITS: EDITS, THUMB: THUMB, FULL: FULL, PHOTO_IDS: PHOTO_IDS, LANGS: LANGS, LANG_LABEL: LANG_LABEL,
   Store: Store, applyEdits: applyEdits, editsChanged: editsChanged, render: function () { render(); }, nm: nm, get openSheet() { return openSheet; } };
 
@@ -306,6 +308,7 @@ var toastEl = null, toastTimer = 0;
 function toast(msg, icon) {
   if (!toastEl) { toastEl = h("div", { class: "toast", role: "status", "aria-live": "polite" }); document.body.append(toastEl); }
   toastEl.replaceChildren(ic(icon || "check", 20), h("span", null, msg));
+  toastEl.classList.toggle("top", !!openSheet || !!searchEl);
   requestAnimationFrame(function () { toastEl.classList.add("in"); });
   clearTimeout(toastTimer); toastTimer = setTimeout(function () { toastEl.classList.remove("in"); }, 2600);
 }
@@ -328,7 +331,7 @@ function sheet(build, opts) {
   requestAnimationFrame(function () { requestAnimationFrame(function () { scrim.classList.add("in"); el.classList.add("in"); }); });
   /* drag down to close */
   var y0 = null, dy = 0;
-  function down(e) { if (!grab.contains(e.target) && !(e.target.closest(".dish-ph") && body.scrollTop <= 0)) return; y0 = e.clientY; dy = 0; el.classList.add("drag"); }
+  function down(e) { if (window.matchMedia && matchMedia("(min-width:760px)").matches) return; if (!grab.contains(e.target) && !(e.target.closest(".dish-ph") && body.scrollTop <= 0)) return; y0 = e.clientY; dy = 0; el.classList.add("drag"); }
   function move(e) { if (y0 == null) return; dy = Math.max(0, e.clientY - y0); el.style.transform = "translate(-50%," + dy + "px)"; }
   function up() { if (y0 == null) return; y0 = null; el.classList.remove("drag"); el.style.transform = ""; if (dy > 110) closeSheet(); }
   el.addEventListener("pointerdown", down); window.addEventListener("pointermove", move); window.addEventListener("pointerup", up); window.addEventListener("pointercancel", up);
@@ -408,6 +411,17 @@ function miniCards(list, api) {
   }));
 }
 
+
+/* segmented controls: the knob glides (with a little liquid stretch) before anything re-renders */
+function slideKnob(group, idx, cb) {
+  var k = group && group.querySelector(".knob"), bs = group ? [].slice.call(group.querySelectorAll(":scope > button")) : [];
+  bs.forEach(function (b, i) { b.setAttribute("aria-pressed", String(i === idx)); });
+  if (k) { k.classList.remove("moving"); void k.offsetWidth; k.classList.add("moving"); k.style.transform = "translateX(" + (idx * 100) + "%)"; setTimeout(function () { k.classList.remove("moving"); }, 420); }
+  buzz(6);
+  if (cb) setTimeout(cb, reduced() ? 0 : 300);
+}
+function segBtn(group, idx) { return function (e) { slideKnob(e.currentTarget.parentElement, idx); }; }
+
 /* ---------- guest ---------- */
 var dockHad = false, guestRoot = null, menuEl = null, chipsEl = null, dockEl = null, spy = null, splashDone = false;
 function lineOpt(it, l) {
@@ -422,7 +436,7 @@ function renderGuest() {
   var root = h("div", { class: "guest" });
   var ph = h("div", { class: "ph" }, h("img", { src: "img/hero-s.webp", srcset: "img/hero-s.webp 900w, img/hero.webp 1584w", sizes: "(min-width:700px) 560px, 100vw", alt: "", fetchpriority: "high" }));
   var langBar = h("div", { class: "lang", role: "group", "aria-label": "Language" }, h("span", { class: "knob", style: "transform:translateX(" + (LANGS.indexOf(S.lang) * 100) + "%)" }),
-    LANGS.map(function (l) { return h("button", { "aria-pressed": String(S.lang === l), lang: l, onclick: function () { setLang(l); } }, LANG_LABEL[l]); }));
+    LANGS.map(function (l, i) { return h("button", { "aria-pressed": String(S.lang === l), lang: l, onclick: function (e) { if (l === S.lang) return; slideKnob(e.currentTarget.parentElement, i); setLang(l); } }, LANG_LABEL[l]); }));
   root.append(h("header", { class: "hero" }, ph,
     h("div", { class: "hero-in" }, langBar),
     h("div", { class: "hero-tx" },
@@ -457,13 +471,21 @@ function parallax(ph) {
     requestAnimationFrame(function () { var y = window.scrollY; if (y < 400) { ph.style.transform = "translateY(" + (y * 0.35) + "px)"; ph.style.opacity = String(Math.max(0, 1 - y / 220)); } ticking = false; });
   };
 }
-function setLang(l) { S.lang = l; save("cm-lang", l); var y = window.scrollY; renderGuest(); window.scrollTo(0, y); }
+function setLang(l) {
+  S.lang = l; save("cm-lang", l); document.documentElement.lang = l;
+  /* update the words in place: the header photo, the knob and the scroll position stay put */
+  var tw = guestRoot.querySelector(".tableword"); if (tw) fill(tw, t("table") + " ", h("b", { class: "num" }, S.table));
+  var ld = guestRoot.querySelector(".hero .lead"); if (ld) ld.textContent = t("tagline");
+  guestRoot.querySelectorAll(".seg > button").forEach(function (b, i) { var gr = M.groups.find(function (x) { return x.id === GROUP_ORDER[i]; }); b.textContent = nm(gr); });
+  var sb = guestRoot.querySelector(".bar .icon-btn"); if (sb) sb.setAttribute("aria-label", t("search"));
+  var ft = guestRoot.querySelector(".foot > span"); if (ft) ft.textContent = t("address");
+  menuEl.classList.add("swap");
+  setTimeout(function () { var y = window.scrollY; buildMenu(); renderDock(); renderStoreNote(); menuEl.classList.remove("swap"); window.scrollTo(0, y); barH(); }, 200);
+}
 function setGroup(g) {
   if (g === S.group) return;
-  S.group = g; buzz(6);
-  var seg = guestRoot.querySelector(".seg");
-  seg.querySelector(".knob").style.transform = "translateX(" + (GROUP_ORDER.indexOf(g) * 100) + "%)";
-  seg.querySelectorAll("button").forEach(function (b, i) { b.setAttribute("aria-pressed", String(GROUP_ORDER[i] === g)); });
+  S.group = g;
+  slideKnob(guestRoot.querySelector(".seg"), GROUP_ORDER.indexOf(g));
   menuEl.classList.add("swap");
   setTimeout(function () {
     buildMenu(); menuEl.classList.remove("swap");
@@ -540,7 +562,7 @@ function lastOrder() {
 function repeatPlan() {
   var L = lastOrder(); if (!L || S.cart.length) return null;
   var age = Date.now() - L.at;
-  if (age < 45 * 60000 && activeOrders().length) return null;
+  if (age < 45 * 60000) return null;
   var drinks = L.items.filter(function (x) { return SEC[BY[x.id].sec].group !== "food"; });
   if (age < 6 * 3600000 && drinks.length) return { title: t("again"), items: drinks };
   return { title: t("repeat"), items: L.items };
@@ -855,8 +877,8 @@ function pinScreen() {
           }, function () { err = st("netErr"); draw(); });
         } }, k === "del" ? ic("x", 22) : k);
       })),
-      h("div", { class: "lang", role: "group", style: "margin-top:8px" }, h("span", { class: "knob", style: "transform:translateX(" + (S.staffLang === "en" ? 42 : 0) + "px)" }),
-        ["vi", "en"].map(function (l) { return h("button", { "aria-pressed": String(S.staffLang === l), onclick: function () { S.staffLang = l; save("cm-staff-lang", l); draw(); } }, l.toUpperCase()); })));
+      h("div", { class: "lang", role: "group", style: "margin-top:8px" }, h("span", { class: "knob", style: "transform:translateX(" + (S.staffLang === "en" ? 100 : 0) + "%)" }),
+        ["vi", "en"].map(function (l, i) { return h("button", { "aria-pressed": String(S.staffLang === l), onclick: function (e) { if (S.staffLang === l) return; slideKnob(e.currentTarget.parentElement, i, function () { S.staffLang = l; save("cm-staff-lang", l); draw(); }); } }, l === "vi" ? "Việt" : "Eng"); })));
   }
   draw();
   return root;
@@ -877,12 +899,12 @@ function renderStaff() {
   var head = h("header", { class: "s-head" },
     h("div", { class: "s-id" }, h("img", { src: "img/logo.png", alt: "Casa Mika" }), h("h1", null, st("title")), h("span", { class: "clock num" }, String(now.getHours()).padStart(2, "0") + ":" + String(now.getMinutes()).padStart(2, "0"))),
     h("div", { class: "s-tools" },
-      h("div", { class: "lang", role: "group", "aria-label": "Language" }, h("span", { class: "knob", style: "transform:translateX(" + (langs.indexOf(S.staffLang) * 42) + "px)" }),
-        langs.map(function (l) { return h("button", { "aria-pressed": String(S.staffLang === l), onclick: function () { S.staffLang = l; save("cm-staff-lang", l); renderStaff(); } }, l.toUpperCase()); })),
+      h("div", { class: "lang", role: "group", "aria-label": "Language" }, h("span", { class: "knob", style: "transform:translateX(" + (langs.indexOf(S.staffLang) * 100) + "%)" }),
+        langs.map(function (l, i) { return h("button", { "aria-pressed": String(S.staffLang === l), onclick: function (e) { if (S.staffLang === l) return; slideKnob(e.currentTarget.parentElement, i, function () { S.staffLang = l; save("cm-staff-lang", l); renderStaff(); }); } }, l === "vi" ? "Việt" : "Eng"); })),
       h("button", { class: "press", "aria-pressed": String(S.sound), onclick: toggleSound }, ic("sound", 20), S.sound ? st("soundOn") : st("sound")),
       h("button", { class: "press", onclick: openStop }, ic("ban", 20), st("stop") + (Object.keys(S.stop).length ? " · " + Object.keys(S.stop).length : "")),
       h("button", { class: "press", onclick: clearDone }, ic("trash", 20), st("clear")),
-      h("a", { href: "#table-" + S.table, style: "color:var(--gold2);font-weight:700;font-size:14px;padding:0 6px" }, st("guest"))));
+      h("a", { href: "#table-" + S.table }, st("guest"))));
   var notice = S.store === "local" ? h("p", { class: "demo", style: "margin:0" }, T[S.staffLang === "vi" ? "vi" : S.staffLang].demo) : S.slow ? h("p", { class: "demo", style: "margin:0" }, T[S.staffLang === "vi" ? "vi" : S.staffLang].slow) : null;
   function lane(k, title, list, card) {
     return h("section", { class: "lane", "data-k": k }, h("h2", null, h("span", null, title), h("b", { class: "num" }, list.length)),
@@ -964,6 +986,7 @@ function glow(kind, mode) {
 function staffGlow(fresh) {
   var reqs = S.reqs.some(function (r) { return r.status === "new"; });
   var ords = S.orders.some(function (o) { return o.status === "new"; });
+  if (Store.live() && !S.pinOk) { glow("order", "off"); return; }
   if (fresh) { glow(fresh, "burst"); return; }
   if (glowBusy) return;
   if (!reqs && !ords) glow("order", "off"); else glow(reqs ? "req" : "order", "breathe");
