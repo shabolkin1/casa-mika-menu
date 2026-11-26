@@ -177,6 +177,14 @@ window.CM_STAFF = {
   Object.assign(T.en, { popToday: "Ordered most today", popHits: "Casa Mika favourites", popN: "ordered {n} times today" });
   Object.assign(T.vi, { popToday: "Được gọi nhiều hôm nay", popHits: "Món được yêu thích", popN: "hôm nay đã gọi {n} lần" });
   Object.assign(T.ko, { popToday: "오늘 많이 주문한 메뉴", popHits: "Casa Mika 인기 메뉴", popN: "오늘 {n}번 주문됨" });
+  Object.assign(T.ru, { howEat: "Как есть", pairWith: "Что взять к нему", howDrink: "Как пить", tagLocal: "Блюдо Дананга", tagCentral: "Центральный Вьетнам", tagShare: "Удобно делить на компанию", tagWait: "Готовится около {n} минут",
+    firstFood: "Первый раз во Вьетнаме?", firstFoodSub: "Начните с этих: так едят здесь каждый день", firstDrinks: "Вьетнамский кофе: с чего начать", firstDrinksSub: "Крепкий, сладкий и совсем не такой, как дома" });
+  Object.assign(T.en, { howEat: "How to eat it", pairWith: "What to pair it with", howDrink: "How to drink it", tagLocal: "A Da Nang dish", tagCentral: "Central Vietnam", tagShare: "Good for sharing", tagWait: "Takes about {n} minutes",
+    firstFood: "First time in Vietnam?", firstFoodSub: "Start with these: this is what people eat here every day", firstDrinks: "Vietnamese coffee: where to start", firstDrinksSub: "Strong, sweet and nothing like home" });
+  Object.assign(T.vi, { howEat: "Cách ăn", pairWith: "Nên dùng kèm", howDrink: "Cách uống", tagLocal: "Đặc sản Đà Nẵng", tagCentral: "Món miền Trung", tagShare: "Hợp ăn chung cả bàn", tagWait: "Chế biến khoảng {n} phút",
+    firstFood: "Món Việt nên thử", firstFoodSub: "Những món ăn hằng ngày của người Việt", firstDrinks: "Cà phê Việt", firstDrinksSub: "Đậm, ngọt và rất riêng" });
+  Object.assign(T.ko, { howEat: "먹는 법", pairWith: "곁들이면 좋은 것", howDrink: "마시는 법", tagLocal: "다낭 음식", tagCentral: "중부 베트남 음식", tagShare: "여럿이 나눠 먹기 좋아요", tagWait: "조리 약 {n}분",
+    firstFood: "베트남이 처음이세요?", firstFoodSub: "현지인이 매일 먹는 이 요리부터 시작하세요", firstDrinks: "베트남 커피, 무엇부터?", firstDrinksSub: "진하고 달콤하고 고향과는 전혀 달라요" });
   B.qrpaid = { vi: "Đã chuyển QR, kiểm tra tiền", ru: "перевёл по QR", en: "paid by QR, check the bank", ko: "QR 송금 완료" };
   Object.assign(ST.vi, { offline: "Mất kết nối với máy chủ. Đơn mới có thể chưa hiện. Đang thử lại…", back: "Đã kết nối lại" });
   Object.assign(ST.en, { offline: "No connection to the server. New orders may not show yet. Retrying…", back: "Back online" });

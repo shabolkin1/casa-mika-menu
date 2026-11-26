@@ -613,6 +613,18 @@ function buildMenu() {
         h("span", { class: "pr num" }, out ? t("out") : priceLabel(it)));
     })));
   }
+  var first = S.lang !== "vi" && FIRST[S.group] ? FIRST[S.group].filter(function (id) { return BY[id] && !BY[id].hide && BY[id].img; }) : [];
+  if (first.length) {
+    kids.push(h("h2", { class: "h-title" }, t(S.group === "food" ? "firstFood" : "firstDrinks")));
+    kids.push(h("p", { class: "h-note" }, t(S.group === "food" ? "firstFoodSub" : "firstDrinksSub")));
+    kids.push(h("div", { class: "hits" }, first.map(function (id) {
+      var it = BY[id], out = !!S.stop[id];
+      return h("button", { class: "hit press" + (out ? " out" : ""), onclick: function () { if (!out) openDish(id); } },
+        h("img", { class: it.ct ? "ct" : null, src: pic(it.img), alt: "", loading: "lazy", decoding: "async", style: "background-color:" + bgOf(it.img), onload: function (e) { e.target.classList.add("ld"); } }),
+        h("span", { class: "nm" }, nm(it)),
+        h("span", { class: "pr num" }, out ? t("out") : priceLabel(it)));
+    })));
+  }
   secs.forEach(function (s) {
     var items = M.items.filter(function (it) { return it.sec === s.id && !it.hide; });
     kids.push(h("section", { class: "sec", id: "s-" + s.id, "data-sec": s.id },
@@ -774,6 +786,16 @@ function renderDock() {
 }
 
 /* dish sheet */
+/* plain facts under a dish: where it comes from, sharing, cooking time */
+function dishFacts(it) {
+  var f = [];
+  if (it.tags.indexOf("local") >= 0) f.push(t("tagLocal")); else if (it.tags.indexOf("central") >= 0) f.push(t("tagCentral"));
+  if (it.tags.indexOf("share") >= 0) f.push(t("tagShare"));
+  if (it.tags.indexOf("wait40") >= 0) f.push(t("tagWait").replace("{n}", 40)); else if (it.tags.indexOf("wait30") >= 0) f.push(t("tagWait").replace("{n}", 30));
+  return f.length ? h("p", { class: "facts" }, f.join(". ") + ".") : null;
+}
+/* first time in Vietnam: a short honest starter set, hidden for Vietnamese guests */
+var FIRST = { food: ["pho-bo", "mi-quang", "banh-xeo", "bun-bo-hue", "goi-cuon", "com-tam"], drinks: ["cf-muoi", "cf-sua", "bac-xiu", "cf-dua", "tra-dao"] };
 function openDish(id) {
   var it = BY[id]; if (!it || S.stop[id]) return;
   var st8 = { v: it.v ? 0 : null, sp: false, q: 1 };
@@ -790,7 +812,10 @@ function openDish(id) {
         S.lang !== "vi" && it.n.vi !== nm(it) ? h("span", { class: "vi", lang: "vi" }, it.n.vi) : null,
         it.d ? h("p", { class: "dd" }, nm({ n: it.d })) : null,
         it.s ? h("p", { class: "story" + (api.full ? " full" : "") }, nm({ n: it.s })) : null,
-        it.s && !api.full ? h("button", { class: "more", onclick: function () { api.full = true; api.rebuild(); } }, t("more")) : null),
+        it.s && !api.full ? h("button", { class: "more", onclick: function () { api.full = true; api.rebuild(); } }, t("more")) : null,
+        dishFacts(it)),
+      it.how ? h("div", { class: "how" }, h("span", { class: "how-ic" }, ic(it.tags.indexOf("pair") >= 0 ? "wine" : SEC[it.sec].group === "food" ? "fork" : "cup", 18)),
+        h("div", null, h("b", null, it.tags.indexOf("pair") >= 0 ? t("pairWith") : SEC[it.sec].group === "food" ? t("howEat") : t("howDrink")), h("p", null, nm({ n: it.how })))) : null,
       it.v ? h("div", null, h("div", { class: "lab" }, t("choose")),
         h("div", { class: "opts" }, it.v.map(function (v, i) {
           return h("button", { class: "opt press", "aria-pressed": String(st8.v === i), onclick: function () { st8.v = i; buzz(6); api.rebuild(); } }, h("b", null, nm(v)), h("span", { class: "num" }, money(v.p)));
