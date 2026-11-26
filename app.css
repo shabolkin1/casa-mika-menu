@@ -679,3 +679,110 @@ body[data-view="guest"] .glow.k-ok{--c1:#cfeed8;--c2:#f4dcae;--c3:#9fe0b4;--c4:#
 .row .tile.t-drinks{background:#1d1f1b}
 .row.out .tile{opacity:.6}
 .nm .nw{white-space:nowrap}
+
+/* ---------- v11 staff: stations, floor, closing a table ---------- */
+.pin-dots.six{gap:12px}
+.pin-pad button.ok{background:var(--tint);color:var(--onTint);border-color:transparent}
+.pin-pad button.ok:disabled{opacity:.25}
+.s-who{font-size:15px;font-weight:600;color:var(--soft);padding:4px 12px;border-radius:999px;background:var(--card2)}
+.s-bar{display:flex;flex-wrap:wrap;gap:10px}
+.s-seg{flex:0 1 auto;min-width:220px;background:var(--card2)}
+.s-seg:last-child{min-width:300px}
+.s-seg button{height:40px;padding:0 14px}
+.lanes.three{grid-template-columns:repeat(3,minmax(0,1fr))}
+@media (max-width:1100px){.lanes.three{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media (max-width:640px){.lanes.three{grid-template-columns:1fr}.s-seg,.s-seg:last-child{min-width:0;flex:1 1 100%}}
+.tk{animation:none}
+.tk.fresh{animation:drop .55s var(--spring) both}
+.tk button.tb{color:var(--ink);text-align:left;padding:0}
+.tk.paid{opacity:.45}
+.tk-ft{display:flex;justify-content:space-between;gap:8px;color:var(--faint);font-size:13px;font-weight:600}
+.stline{display:flex;flex-wrap:wrap;gap:6px;font-size:13px;font-weight:600}
+.stline span{padding:3px 10px;border-radius:999px;background:var(--card2);color:var(--soft)}
+.stline .s-accepted{color:var(--blue)}.stline .s-served{color:var(--green)}
+.hall{display:grid;grid-template-columns:repeat(auto-fill,minmax(132px,1fr));gap:12px}
+.tbl{--c:rgba(255,255,255,.12);min-height:112px;border-radius:22px;background:var(--card);box-shadow:inset 0 0 0 1.5px var(--c);display:flex;flex-direction:column;align-items:flex-start;justify-content:space-between;padding:14px 16px;text-align:left;color:var(--ink)}
+.tbl b{font-family:var(--fontD);font-size:34px;font-weight:700;line-height:1;letter-spacing:-.02em}
+.tbl span{font-size:14px;font-weight:600;color:var(--soft)}
+.tbl small{font-size:14px;font-weight:600;color:var(--ink)}
+.tbl.s-free{opacity:.55}
+.tbl.s-new{--c:var(--tint2)}.tbl.s-cook{--c:var(--blue)}.tbl.s-eat{--c:var(--green)}
+.tbl.s-req,.tbl.s-bill{--c:var(--red);background:rgba(255,69,58,.1)}
+.tbl.s-req span,.tbl.s-bill span{color:var(--red)}
+.tb-orders{display:flex;flex-direction:column;gap:10px}
+.tb-o{background:var(--card2);border-radius:18px;padding:12px 14px}
+.tb-oh{display:flex;justify-content:space-between;gap:8px;font-size:14px;color:var(--soft);margin-bottom:6px}
+.tb-oh b{color:var(--ink)}
+.tb-o ul{margin:0;padding:0;list-style:none;display:flex;flex-direction:column;gap:4px;font-size:15px}
+.tb-o li{display:flex;justify-content:space-between;gap:10px}
+.tb-sum{display:flex;justify-content:space-between;align-items:baseline;font-size:17px;padding:4px 2px}
+.tb-sum b{font-size:22px}
+.tb-pay{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
+.tb-pay .pill{height:52px;border-radius:16px;background:var(--card2);font-weight:600;font-size:16px;color:var(--ink)}
+.tb-pay .pill:disabled{opacity:.4}
+.so-list{display:flex;flex-direction:column;gap:6px;max-height:44vh;overflow:auto}
+.so-row{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:6px 6px 6px 14px;border-radius:16px;background:var(--card2)}
+.so-row b{font-size:15px;font-weight:600;display:block}
+.so-row small{color:var(--soft);font-size:13px}
+.so-row .stepper button{height:44px;width:40px}
+.go:disabled{opacity:.4}
+
+/* ---------- performance ---------- */
+/* chips already sit on the blurred bar: a second blur under each chip costs a lot and shows nothing */
+.bar .chips button{-webkit-backdrop-filter:none;backdrop-filter:none}
+/* the edge glow only spins while it is shown */
+.glow:not(.on):not(.burst):not(.breathe){visibility:hidden;transition:opacity .7s var(--ease),visibility 0s .7s}
+.glow:not(.on):not(.burst):not(.breathe) i{animation:none}
+/* the page behind a sheet steps back without a filter; the scrim darkens it instead */
+@media (max-width:759px){
+  body.recede .guest{filter:none}
+  body[data-view="guest"] .scrim{background:rgba(0,0,0,.6)}
+}
+.guest{transition:transform .58s var(--e-sheet),border-radius .58s var(--e-sheet)}
+.splash.gone{filter:none}
+
+/* light look for weak devices: same layout and colours, no live blur, no constant animation */
+html.lite *{-webkit-backdrop-filter:none!important;backdrop-filter:none!important}
+html.lite .lang,html.lite .seg,html.lite .chips button:not(.on),html.lite .icon-btn,html.lite .bell,html.lite .track,html.lite .close,html.lite .toast{background:#2e2722}
+html.lite .bar{background:rgba(16,13,10,.97)}
+html.lite .ad-bar{background:rgba(16,13,10,.98)}
+html.lite .glow b{display:none}
+html.lite .glow i{animation:none;--ga:30deg}
+html.lite .glow.breathe{animation:none;opacity:.8}
+html.lite .hero .ph img{animation:none}
+html.lite .guest{transition:none}
+html.lite body.recede .guest{transform:none}
+html.lite .tk.fresh{animation-duration:.3s}
+html.lite .sheet{transition-duration:.36s}
+html.lite .splash .sp-logo,html.lite .splash *{animation-iteration-count:1}
+
+/* ---------- v11 admin: stats, team, QR ---------- */
+.kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:8px}
+.kpi{background:var(--card2);border-radius:18px;padding:12px 14px;display:flex;flex-direction:column;gap:4px;min-width:0}
+.kpi small{font-size:13px;font-weight:600;color:var(--soft)}
+.kpi b{font-size:20px;font-weight:700;letter-spacing:-.01em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.hours{display:flex;align-items:flex-end;gap:3px;height:120px;padding:0 2px 18px;position:relative}
+.hb{flex:1;height:100%;display:flex;flex-direction:column;justify-content:flex-end;position:relative;min-width:0}
+.hb i{display:block;background:var(--tint2);border-radius:4px 4px 1px 1px;min-height:2px}
+.hb small{position:absolute;bottom:-18px;left:50%;transform:translateX(-50%);font-size:11px;color:var(--faint)}
+.toplist{display:flex;flex-direction:column;gap:8px}
+.tl{display:flex;flex-direction:column;gap:4px}
+.tl-t{display:flex;justify-content:space-between;gap:10px;font-size:15px}
+.tl-t span:first-child{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.tl-t .num{color:var(--soft);flex:0 0 auto}
+.tl i{display:block;height:6px;border-radius:3px;background:var(--tint2);opacity:.8}
+.kv{display:flex;flex-direction:column;background:var(--card2);border-radius:18px;padding:4px 14px}
+.kv>div{display:flex;justify-content:space-between;align-items:center;gap:10px;min-height:44px;font-size:15px;border-bottom:.5px solid rgba(255,255,255,.07)}
+.kv>div:last-child{border-bottom:0}
+input[type=time].ad-in{color-scheme:dark}
+.sheet .body>.go,.sheet .body>div>.go{flex:none;width:100%}
+.tb-pay .pill[aria-pressed="true"]{background:var(--tint2);color:var(--onTint)}
+.ok-go{margin-top:10px;background:var(--green);color:#06240f}
+.so-new{flex:none;display:flex;align-items:center;justify-content:center;gap:8px;height:52px;border-radius:999px;background:var(--card2);font-weight:600;font-size:16px;color:var(--ink)}
+@media (max-width:640px){
+  .staff .s-tools{flex-wrap:nowrap;overflow-x:auto;margin:0 -22px;padding:2px 22px;scrollbar-width:none}
+  .staff .s-tools::-webkit-scrollbar{display:none}
+  .staff .s-tools>*{flex:0 0 auto}
+  .staff .s-id h1{font-size:24px}
+}
+.toast.top{bottom:auto!important}

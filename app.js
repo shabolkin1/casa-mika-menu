@@ -96,6 +96,9 @@ var ICONS = {
   beer: '<svg ' + SV + '><path d="M6 7h10v12a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2z"/><path d="M16 10h2a2 2 0 0 1 2 2v3a2 2 0 0 1-2 2h-2"/><path d="M6 7a3 3 0 0 1 5-2 3 3 0 0 1 5 2"/></svg>',
   trash: '<svg ' + SV + '><path d="M4 7h16M10 11v6M14 11v6"/><path d="M6 7l1 13h10l1-13M9 7V4h6v3"/></svg>',
   dots: '<svg ' + SV + ' stroke-width="2.4"><path d="M6 12h.01M12 12h.01M18 12h.01"/></svg>',
+  chart: '<svg ' + SV + '><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg>',
+  qr: '<svg ' + SV + '><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><path d="M14 14h3v3h-3zM20 14v.01M14 20h.01M17 20h4v-3"/></svg>',
+  users: '<svg ' + SV + '><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20a6.5 6.5 0 0 1 13 0M16 4.5a3.5 3.5 0 0 1 0 7M18 14.5a6 6 0 0 1 3.5 5.5"/></svg>',
   door: '<svg ' + SV + '><path d="M14 4h5v16h-5"/><path d="M10 8l-4 4 4 4M6 12h9"/></svg>'
 };
 
@@ -136,7 +139,9 @@ var Store = (function () {
       chips: (Array.isArray(d.chips) ? d.chips : []).filter(function (c) { return CHIPS[c]; }),
       note: typeof d.note === "string" ? d.note.slice(0, 300) : "",
       status: ["new", "accepted", "served"].indexOf(d.status) >= 0 ? d.status : "new",
-      createdAt: Number(d.createdAt) || 0, code: parseInt(d.code, 10) || 0, lang: LANGS.indexOf(d.lang) >= 0 ? d.lang : "en" };
+      createdAt: Number(d.createdAt) || 0, code: parseInt(d.code, 10) || 0, lang: LANGS.indexOf(d.lang) >= 0 ? d.lang : "en",
+      stations: d.stations && typeof d.stations === "object" ? d.stations : {}, acceptedAt: Number(d.acceptedAt) || 0, servedAt: Number(d.servedAt) || 0,
+      acceptedBy: d.acceptedBy || "", servedBy: d.servedBy || "", paidAt: Number(d.paidAt) || 0, payMethod: d.payMethod || "", staff: d.staff || "" };
   }
   function cleanReq(d, id) {
     d = d || {};
@@ -183,7 +188,9 @@ var Store = (function () {
     };
   }
   /* ---- live server (Supabase) ---- */
-  function rowOrder(r) { return cleanOrder({ table: r.table_no, items: r.items, chips: r.chips, note: r.note, status: r.status, createdAt: Date.parse(r.created_at), code: r.code, lang: r.lang }, r.id); }
+  function ts(x) { return x ? Date.parse(x) : 0; }
+  function rowOrder(r) { return cleanOrder({ table: r.table_no, items: r.items, chips: r.chips, note: r.note, status: r.status, createdAt: ts(r.created_at), code: r.code, lang: r.lang,
+    stations: r.stations, acceptedAt: ts(r.accepted_at), servedAt: ts(r.served_at), acceptedBy: r.accepted_by, servedBy: r.served_by, paidAt: ts(r.paid_at), payMethod: r.pay_method, staff: r.staff }, r.id); }
   function rowReq(r) { return cleanReq({ table: r.table_no, kind: r.kind, extra: r.extra, status: r.status, createdAt: Date.parse(r.created_at), lang: r.lang }, r.id); }
   var pulling = false, again = false;
   function pull() {
@@ -191,8 +198,8 @@ var Store = (function () {
     if (pulling) { again = true; return; }
     pulling = true;
     Promise.all([
-      sb.from("orders").select("*").order("created_at", { ascending: false }).limit(120),
-      sb.from("requests").select("*").order("created_at", { ascending: false }).limit(120),
+      sb.from("orders").select("*").eq("archived", false).order("created_at", { ascending: false }).limit(150),
+      sb.from("requests").select("*").eq("archived", false).order("created_at", { ascending: false }).limit(150),
       sb.from("stoplist").select("ids").eq("id", 1).maybeSingle()
     ]).then(function (r) {
       if (r[0].error || r[1].error) throw r[0].error || r[1].error;
@@ -210,7 +217,8 @@ var Store = (function () {
       var stamp = r[0].data.map(function (x) { return x.id + x.updated_at; }).join() + "|" + r[1].data.map(function (x) { return x.id + x.updated_at; }).join();
       if (stamp === editsAt) return; editsAt = stamp;
       Object.keys(EDITS).forEach(function (k) { delete EDITS[k]; }); Object.keys(PHOTO_IDS).forEach(function (k) { delete PHOTO_IDS[k]; });
-      r[0].data.forEach(function (x) { if (BY[x.id] && x.data && typeof x.data === "object") EDITS[x.id] = x.data; });
+      r[0].data.forEach(function (x) { if ((BY[x.id] || isNewId(x.id)) && x.data && typeof x.data === "object") EDITS[x.id] = x.data; });
+      syncNew();
       r[1].data.forEach(function (x) { if (BY[x.id] && /^data:image\/(webp|jpeg);base64,/.test(x.thumb)) { PHOTO_IDS[x.id] = x.updated_at; if (THUMB[x.id] !== x.thumb) delete FULL[x.id]; THUMB[x.id] = x.thumb; } });
       editsChanged();
     }, function () {});
@@ -243,10 +251,10 @@ var Store = (function () {
   }
   function pin() { return load("cm-pin", ""); }
   function rpc(name, args) {
-    return sb.rpc(name, Object.assign({ pin: pin() }, args)).then(function (r) { if (r.error) throw r.error; pull(); return r.data; });
+    return sb.rpc(name, Object.assign({ pin: pin() }, args)).then(function (r) { if (r.error) throw r.error; if (r.data === false || r.data === -1) throw { message: "bad pin" }; if (r.data === null) throw { message: "locked" }; pull(); return r.data; });
   }
   function apin() { return load("cm-admin-pin", ""); }
-  function arpc(name, args) { return sb.rpc(name, Object.assign({ pin: apin() }, args)).then(function (r) { if (r.error) throw r.error; return r.data; }); }
+  function arpc(name, args) { return sb.rpc(name, Object.assign({ pin: apin() }, args)).then(function (r) { if (r.error) throw r.error; if (r.data === false) throw { message: "bad pin" }; if (r.data === null) throw { message: "locked" }; return r.data; }); }
   return {
     on: function (f) { cbs.push(f); },
     live: function () { return !!sb; },
@@ -255,7 +263,7 @@ var Store = (function () {
       if (!sb) return Promise.resolve();
       return sb.from("menu_photos").select("full_img").eq("id", id).maybeSingle().then(function (r) { if (r.data && r.data.full_img) FULL[id] = r.data.full_img; });
     },
-    adminCheck: function (p) { return sb.rpc("admin_check", { pin: p }).then(function (r) { if (r.error) throw r.error; return r.data === true; }); },
+    adminCheck: function (p) { return sb.rpc("admin_check", { pin: p }).then(function (r) { if (r.error) throw r.error; if (r.data === null) throw { message: "locked" }; return r.data === true; }); },
     adminSetItem: function (id, data) { return arpc("admin_set_item", { item_id: id, new_data: data }).then(function () { return pullEdits(); }); },
     adminSetPhoto: function (id, thumb, full) { return arpc("admin_set_photo", { item_id: id, thumb: thumb, full_img: full }).then(function () { if (full) FULL[id] = full; else delete FULL[id]; }); },
     adminSetPins: function (staffPin, adminPin) { return arpc("admin_set_pins", { new_staff: staffPin || null, new_admin: adminPin || null }); },
@@ -270,7 +278,29 @@ var Store = (function () {
     adminFeedback: function () { return arpc("admin_feedback", {}); },
     adminSetTelegram: function (tok, chat) { return arpc("admin_set_telegram", { new_token: tok || "", new_chat: chat || "" }); },
     adminTelegramOn: function () { return arpc("admin_telegram_on", {}); },
-    checkPin: function (p) { return sb.rpc("staff_check", { pin: p }).then(function (r) { if (r.error) throw r.error; return r.data === true; }); },
+    whoami: function () { return sb ? sb.rpc("staff_whoami", { pin: pin() }).then(function (r) { return r.error ? "" : (r.data || ""); }, function () { return ""; }) : Promise.resolve(""); },
+    setStation: function (id, station, status) {
+      if (sb) return rpc("staff_set_station", { order_id: id, station: station, new_status: status });
+      var o = local.orders[id]; if (!o) return Promise.resolve();
+      o.stations = Object.assign({}, o.stations || {}); o.stations[station] = status;
+      var v = Object.keys(o.stations).map(function (k) { return o.stations[k]; });
+      o.status = v.every(function (x) { return x === "served"; }) ? "served" : v.some(function (x) { return x !== "new"; }) ? "accepted" : "new";
+      if (o.status !== "new" && !o.acceptedAt) o.acceptedAt = Date.now(); if (o.status === "served" && !o.servedAt) o.servedAt = Date.now();
+      persist(); return Promise.resolve();
+    },
+    closeTable: function (table, method) {
+      if (sb) return rpc("staff_close_table", { tbl: table, method: method });
+      var n = 0; Object.keys(local.orders).forEach(function (k) { var o = local.orders[k]; if (o.table === table && !o.paidAt && Date.now() - o.createdAt < 12 * 3600000) { o.paidAt = Date.now(); o.payMethod = method; o.status = "served"; o.servedAt = o.servedAt || Date.now(); n++; } });
+      Object.keys(local.reqs).forEach(function (k) { var r = local.reqs[k]; if (r.table === table && r.kind === "bill") r.status = "done"; });
+      persist(); return Promise.resolve(n);
+    },
+    adminStaffList: function () { return arpc("admin_staff_list", {}); },
+    adminStaffAdd: function (name, p) { return arpc("admin_staff_add", { new_name: name, new_pin: p }); },
+    adminStaffRemove: function (id) { return arpc("admin_staff_remove", { member: id }); },
+    adminOrders: function (days) { return arpc("admin_orders", { days: days }).then(function (rows) { return (rows || []).map(rowOrder); }); },
+    adminSetStaffChat: function (chat) { return arpc("admin_set_staff_chat", { new_chat: chat || "" }); },
+    adminStaffChatOn: function () { return arpc("admin_staff_chat_on", {}); },
+    checkPin: function (p) { return sb.rpc("staff_check", { pin: p }).then(function (r) { if (r.error) throw r.error; if (r.data === null) throw { message: "locked" }; return r.data === true; }); },
     boot: function () {
       if (CFG.supabaseUrl && CFG.supabaseKey && window.supabase) { startSb(); return; }
       var done = false;
@@ -290,18 +320,21 @@ var Store = (function () {
     },
     addOrder: function (o) {
       var self = this;
-      if (sb) return sb.from("orders").insert({ table_no: o.table, items: o.items, chips: o.chips, note: o.note, code: o.code, lang: o.lang, client_key: o.key || null }).select("id").single()
+      if (sb) return sb.from("orders").insert({ table_no: o.table, items: o.items, chips: o.chips, note: o.note, code: o.code, lang: o.lang, client_key: o.key || null, stations: stationsOf(o.items), staff: o.staff || null }).select("id").single()
         .then(function (r) {
           if (r.error && r.error.code === "23505" && o.key) return sb.from("orders").select("id").eq("client_key", o.key).single().then(function (x) { if (x.error) throw netErr(x.error); pull(); return x.data.id; });
           if (r.error) throw netErr(r.error); pull(); return r.data.id;
         }, function (e) { throw netErr(e); });
       if (db) { var r = db.collection("orders").doc(); return r.set(o).then(function () { return r.id; }, fallback(function () { return self.addOrder(o); })); }
-      var id = rid(); local.orders[id] = o; persist(); return Promise.resolve(id);
+      var id = rid(); local.orders[id] = Object.assign({ stations: stationsOf(o.items) }, o); persist(); return Promise.resolve(id);
     },
     setOrder: function (id, patch) {
       if (sb) return rpc("staff_set_order", { order_id: id, new_status: patch.status });
       if (db) return db.doc("orders/" + id).update(patch);
-      if (local.orders[id]) { Object.assign(local.orders[id], patch); persist(); } return Promise.resolve();
+      var lo = local.orders[id];
+      if (lo) { Object.assign(lo, patch); if (patch.status) { var st2 = {}; Object.keys(lo.stations || {}).forEach(function (k) { st2[k] = patch.status === "new" ? lo.stations[k] : patch.status === "served" ? "served" : lo.stations[k] === "new" ? "accepted" : lo.stations[k]; }); lo.stations = st2;
+        if (patch.status !== "new" && !lo.acceptedAt) lo.acceptedAt = Date.now(); if (patch.status === "served" && !lo.servedAt) lo.servedAt = Date.now(); } persist(); }
+      return Promise.resolve();
     },
     clearDone: function () { return sb ? rpc("staff_clear_done", {}) : null; },
     delOrder: function (id) { if (db) return db.doc("orders/" + id).delete(); delete local.orders[id]; persist(); return Promise.resolve(); },
@@ -325,6 +358,32 @@ var Store = (function () {
 
 /* ---------- manager edits on top of menu.json ---------- */
 var BASE = {}, EDITS = {}, PHOTO_IDS = {};
+/* dishes the manager adds live only in menu_overrides, under ids "new-…" */
+function isNewId(id) { return /^new-[a-z0-9]{4,20}$/.test(id); }
+function syncNew() {
+  M.items = M.items.filter(function (it) { if (!it.isNew || (EDITS[it.id] && EDITS[it.id].new)) return true; delete BY[it.id]; delete BASE[it.id]; return false; });
+  Object.keys(EDITS).forEach(function (id) {
+    var e = EDITS[id]; if (!isNewId(id) || !e.new || !SEC[e.sec]) return;
+    var nm0 = {}; LANGS.forEach(function (l) { var x = e.n && e.n[l]; if (typeof x === "string" && x.trim()) nm0[l] = x.trim().slice(0, 160); });
+    var first = nm0.en || nm0.vi || nm0.ru || nm0.ko; if (!first || !(e.p > 0)) return;
+    LANGS.forEach(function (l) { if (!nm0[l]) nm0[l] = l === "vi" ? (nm0.vi || first) : (nm0.en || first); });
+    var base = { id: id, sec: e.sec, n: nm0, p: Math.min(e.p, 1e9), tags: [], isNew: true };
+    BASE[id] = JSON.parse(JSON.stringify(base));
+    if (BY[id]) { BY[id].sec = e.sec; return; }
+    var at = -1; M.items.forEach(function (it, i) { if (it.sec === e.sec) at = i; });
+    var it = JSON.parse(JSON.stringify(base)); BY[id] = it;
+    if (at < 0) M.items.push(it); else M.items.splice(at + 1, 0, it);
+  });
+}
+/* "07:00-11:30": the dish shows only in that window (the window may cross midnight) */
+function inHours(hrs, d) {
+  var m = /^(\d{2}):(\d{2})-(\d{2}):(\d{2})$/.exec(hrs || ""); if (!m) return true;
+  d = d || new Date(); var now = d.getHours() * 60 + d.getMinutes(), a = +m[1] * 60 + +m[2], b = +m[3] * 60 + +m[4];
+  return a <= b ? now >= a && now < b : now >= a || now < b;
+}
+var hoursKey = "";
+function hoursState() { return M.items.filter(function (it) { return it.hrs; }).map(function (it) { return it.id + (inHours(it.hrs) ? 1 : 0); }).join(); }
+setInterval(function () { if (!M || !M.items) return; var k = hoursState(); if (k !== hoursKey) { hoursKey = k; editsChanged(); } }, 60000);
 function applyEdits() {
   M.items.forEach(function (it) {
     var b = BASE[it.id], e = EDITS[it.id] || {};
@@ -334,6 +393,8 @@ function applyEdits() {
     if (it.v) it.p = Math.min.apply(null, it.v.map(function (v) { return v.p; }));
     ["n", "d", "s"].forEach(function (k) { if (e[k] && typeof e[k] === "object") { it[k] = it[k] || {}; LANGS.forEach(function (l) { var x = e[k][l]; if (typeof x === "string" && x.trim()) it[k][l] = x.trim().slice(0, k === "s" ? 900 : 160); }); } });
     if (e.hide === true) it.hide = true;
+    delete it.hrs; delete it.offh;
+    if (typeof e.hours === "string" && /^\d{2}:\d{2}-\d{2}:\d{2}$/.test(e.hours)) { it.hrs = e.hours; if (!inHours(e.hours)) { it.offh = true; if (S.view !== "admin") it.hide = true; } }
     if (PHOTO_IDS[it.id]) { it.img = "x:" + it.id; delete it.lo; delete it.ct; }
   });
 }
@@ -348,12 +409,12 @@ function loadAdmin() {
 }
 window.CM = { slideKnob: slideKnob, reduced: reduced, h: h, add: add, ic: ic, fill: fill, sheet: sheet, closeSheet: closeSheet, toast: toast, buzz: buzz, load: load, save: save, pic: pic, bgOf: bgOf, money: money,
   get M() { return M; }, BY: BY, SEC: SEC, S: S, BASE: BASE, EDITS: EDITS, THUMB: THUMB, FULL: FULL, PHOTO_IDS: PHOTO_IDS, LANGS: LANGS, LANG_LABEL: LANG_LABEL,
-  Store: Store, applyEdits: applyEdits, editsChanged: editsChanged, render: function () { render(); }, nm: nm, get openSheet() { return openSheet; } };
+  Store: Store, applyEdits: applyEdits, isNewId: isNewId, syncNew: syncNew, inHours: inHours, stationOf: function (id) { return stationOf(id); }, editsChanged: editsChanged, render: function () { render(); }, nm: nm, get openSheet() { return openSheet; } };
 
 /* ---------- routing ---------- */
 function route() {
   var m = /^#table-(\d{1,2})$/.exec(location.hash);
-  if (location.hash === "#admin") { S.view = "admin"; document.body.setAttribute("data-view", "admin"); closeSheet(true); clearInterval(staffTimer); glow("order", "off"); window.onscroll = null; loadAdmin(); return; }
+  if (location.hash === "#admin") { S.view = "admin"; if (M && M.items) applyEdits(); document.body.setAttribute("data-view", "admin"); closeSheet(true); clearInterval(staffTimer); glow("order", "off"); window.onscroll = null; loadAdmin(); return; }
   if (location.hash === "#bar") S.view = "staff";
   else { S.view = "guest"; if (m) { var n = +m[1]; if (n >= 1 && n <= 99) { S.table = n; save("cm-table", n); } } }
   document.body.setAttribute("data-view", S.view);
@@ -421,6 +482,9 @@ function closeSheet(now) {
 document.addEventListener("keydown", function (e) { if (e.key === "Escape") { if (searchEl) closeSearch(); else closeSheet(); } });
 
 /* ---------- cart ---------- */
+/* which station makes each part of an order: the kitchen cooks food, the bar makes drinks */
+function stationOf(id) { var it = BY[id]; return it && SEC[it.sec].group === "food" ? "kitchen" : "bar"; }
+function stationsOf(items) { var s = {}; (items || []).forEach(function (x) { if (BY[x.id]) s[stationOf(x.id)] = "new"; }); return s; }
 function cartKey(id, v, sp) { return id + "|" + (v == null ? "" : v) + "|" + (sp ? 1 : 0); }
 function itemPrice(it, v) { return it.v && v != null && it.v[v] ? it.v[v].p : it.p; }
 function cartCount() { return S.cart.reduce(function (s, l) { return s + (S.stop[l.id] ? 0 : l.q); }, 0); }
@@ -501,7 +565,7 @@ function liqClip(group, idx) {
 function liquid(group) {
   if (!group || group.querySelector(":scope > .liq")) return;
   var bs = [].slice.call(group.querySelectorAll(":scope > button"));
-  var L = h("div", { class: "liq now", "aria-hidden": "true" }, bs.map(function (b) { return h("span", { lang: b.getAttribute("lang") || null }, b.textContent); }));
+  var L = h("div", { class: "liq now", "aria-hidden": "true", style: "grid-template-columns:repeat(" + bs.length + ",minmax(0,1fr))" }, bs.map(function (b) { return h("span", { lang: b.getAttribute("lang") || null }, b.textContent); }));
   group.append(L);
   var idx = Math.max(0, bs.findIndex(function (b) { return b.getAttribute("aria-pressed") === "true"; }));
   requestAnimationFrame(function () { L.style.clipPath = liqClip(group, idx); requestAnimationFrame(function () { L.classList.remove("now"); }); });
@@ -510,7 +574,24 @@ function liqText(group) {
   var L = group && group.querySelector(":scope > .liq"); if (!L) return;
   var bs = group.querySelectorAll(":scope > button"); L.querySelectorAll("span").forEach(function (s, i) { if (bs[i]) s.textContent = bs[i].textContent; });
 }
-new MutationObserver(function () { document.querySelectorAll(".lang,.seg").forEach(liquid); }).observe(document.documentElement, { childList: true, subtree: true });
+var liqQueued = false;
+new MutationObserver(function () {
+  if (liqQueued) return; liqQueued = true;
+  requestAnimationFrame(function () { liqQueued = false; document.querySelectorAll(".lang,.seg").forEach(liquid); });
+}).observe(document.body, { childList: true, subtree: true });
+/* if frames come slowly in the first seconds, switch to the light look for this device */
+(function () {
+  if (document.documentElement.classList.contains("lite") || /[?&]lite=0/.test(location.search)) return;
+  var n = 0, slow = 0, last = 0, t0 = 0;
+  function tick(now) {
+    if (document.hidden) { last = 0; requestAnimationFrame(tick); return; }
+    if (last) { var d = now - last; n++; if (d > 34) slow++; } else t0 = now;
+    last = now;
+    if (n < 150) { requestAnimationFrame(tick); return; }
+    if (slow / n > 0.3) { document.documentElement.classList.add("lite"); try { localStorage.setItem("cm-lite", "1"); } catch (e) {} }
+  }
+  setTimeout(function () { requestAnimationFrame(tick); }, 2500);
+})();
 window.addEventListener("resize", function () {
   document.querySelectorAll(".lang,.seg").forEach(function (g) {
     var L = g.querySelector(":scope > .liq"); if (!L) return;
@@ -940,8 +1021,8 @@ function sendReq(kind, extra, el) {
   if (el) ripple(el);
   hap("medium");
   return Store.addReq({ table: S.table, kind: kind, extra: (extra || "").slice(0, 200), status: "new", createdAt: Date.now(), lang: S.lang })
-    .then(function (id) { S.mineR = [id].concat(S.mineR).slice(0, 30); save("cm-mine-r", S.mineR); toast(t("rqToast")); renderDock(); if (openSheet && openSheet.kind === "service") openSheet.rebuild(); },
-      function () { toast(t("errSend"), "x"); });
+    .then(function (id) { S.mineR = [id].concat(S.mineR).slice(0, 30); save("cm-mine-r", S.mineR); toast(t("rqToast")); renderDock(); if (openSheet && openSheet.kind === "service") openSheet.rebuild(); return true; },
+      function () { hap("error"); toast(t("errSend"), "x"); return false; });
 }
 function ripple(el) {
   var r = el.getBoundingClientRect(), s = Math.max(r.width, r.height) * 2.2;
@@ -976,7 +1057,7 @@ function openService() {
 /* bill: what this phone ordered, and the café's bank QR with the amount filled in */
 function billEx(x) { var m = /^([a-z]+)(?::(\d+))?$/.exec(x || ""); return m ? { k: m[1], sum: m[2] ? +m[2] : 0 } : { k: x, sum: 0 }; }
 function billOrders() {
-  return S.orders.filter(function (o) { return S.mineO.indexOf(o.id) >= 0 && S.paid.indexOf(o.id) < 0 && Date.now() - o.createdAt < 5 * 3600000; });
+  return S.orders.filter(function (o) { return S.mineO.indexOf(o.id) >= 0 && !o.paidAt && S.paid.indexOf(o.id) < 0 && Date.now() - o.createdAt < 5 * 3600000; });
 }
 function orderSum(o) { return o.items.reduce(function (s, x) { var it = BY[x.id]; return s + (it ? itemPrice(it, x.v) * x.q : 0); }, 0); }
 function qrReady() { var c = S.cfg || {}; return /^\d{6}$/.test(c.bank || "") && /^[0-9A-Za-z]{4,30}$/.test(c.acct || ""); }
@@ -1000,7 +1081,8 @@ function billPanel(api) {
         } }, ic("copy", 18), h("span", null, t("copy")))),
       h("button", { class: "go press", disabled: !sum, onclick: function (e) {
         var ids = list.map(function (o) { return o.id; });
-        Promise.resolve(sendReq("bill", "qrpaid" + (sum ? ":" + sum : ""), e.currentTarget)).then(function () {
+        Promise.resolve(sendReq("bill", "qrpaid" + (sum ? ":" + sum : ""), e.currentTarget)).then(function (ok) {
+          if (ok !== true) return;
           S.paid = S.paid.concat(ids).slice(-40); save("cm-paid", S.paid); api.qr = false; api.bill = false; toast(t("qrPaidToast")); if (openSheet) openSheet.rebuild();
         });
       } }, h("span", null, t("qrPaid"))));
@@ -1177,25 +1259,31 @@ function chime(kind) {
 }
 function staffName(it) { return S.staffLang === "vi" ? it.n.vi : (it.n[S.staffLang] || it.n.en); }
 function mins(ts) { return Math.max(0, Math.floor((Date.now() - ts) / 60000)); }
-function staffErr(e) { if (e && /pin/i.test(e.message || "")) { save("cm-pin", ""); S.pinOk = false; renderStaff(); } else toast(st("netErr"), "x"); }
+function staffErr(e) { if (e && e.message === "locked") { toast(st("locked"), "x"); return; } if (e && /pin/i.test(e.message || "")) { save("cm-pin", ""); S.pinOk = false; renderStaff(); } else toast(st("netErr"), "x"); }
 function pinScreen() {
-  var val = "", err = "";
+  var val = "", err = "", busy = false;
   var root = h("div", { class: "pin" });
+  function check() {
+    if (busy || val.length < 4) return;
+    busy = true;
+    Store.checkPin(val).then(function (ok) {
+      busy = false;
+      if (ok) { save("cm-pin", val); S.pinOk = true; S.who = ""; renderStaff(); }
+      else { err = st("pinBad"); val = ""; draw(); }
+    }, function (e) { busy = false; val = ""; err = e && e.message === "locked" ? st("locked") : st("netErr"); draw(); });
+  }
   function draw() {
     root.replaceChildren(
       h("img", { src: "img/logo.png", alt: "Casa Mika", class: "pin-logo" }),
       h("h1", null, st("title")),
       h("p", null, err || st("pinHint")),
-      h("div", { class: "pin-dots" + (err ? " shake" : ""), "aria-label": st("pinHint") }, [0, 1, 2, 3].map(function (i) { return h("span", { class: i < val.length ? "on" : "" }); })),
-      h("div", { class: "pin-pad" }, ["1","2","3","4","5","6","7","8","9","","0","del"].map(function (k) {
-        if (!k) return h("span");
+      h("div", { class: "pin-dots six" + (err ? " shake" : ""), "aria-label": st("pinHint") }, [0, 1, 2, 3, 4, 5].map(function (i) { return h("span", { class: i < val.length ? "on" : "" }); })),
+      h("div", { class: "pin-pad" }, ["1","2","3","4","5","6","7","8","9","ok","0","del"].map(function (k) {
+        if (k === "ok") return h("button", { class: "press ok", "aria-label": "OK", disabled: val.length < 4, onclick: check }, ic("check", 26));
         return h("button", { class: "press", "aria-label": k === "del" ? "Delete" : k, onclick: function () {
           if (k === "del") val = val.slice(0, -1); else if (val.length < 6) val += k;
           err = ""; draw();
-          if (val.length >= 4) Store.checkPin(val).then(function (ok) {
-            if (ok) { save("cm-pin", val); S.pinOk = true; renderStaff(); }
-            else if (val.length >= 6) { err = st("pinBad"); val = ""; draw(); }
-          }, function () { err = st("netErr"); draw(); });
+          if (val.length === 6) check();
         } }, k === "del" ? ic("x", 22) : k);
       })),
       h("div", { class: "lang", role: "group", style: "margin-top:8px" }, h("span", { class: "knob", style: "transform:translateX(" + (S.staffLang === "en" ? 100 : 0) + "%)" }),
@@ -1204,39 +1292,202 @@ function pinScreen() {
   draw();
   return root;
 }
+
+/* ---------- staff: one screen for the whole floor, or only the kitchen, or only the bar ---------- */
+S.station = load("cm-station", "all");          /* all | kitchen | bar */
+S.sview = load("cm-sview", "orders");           /* orders | hall */
+function stationsFor(o) { var k = Object.keys(o.stations || {}); return k.length ? k : ["kitchen", "bar"].filter(function (s) { return o.items.some(function (x) { return stationOf(x.id) === s; }); }); }
+function myItems(o) { return S.station === "all" ? o.items : o.items.filter(function (x) { return stationOf(x.id) === S.station; }); }
+function myStatus(o) {
+  if (S.station === "all") return o.status;
+  var s = o.stations && o.stations[S.station];
+  return s || (o.status === "served" ? "served" : o.status);
+}
+function orderSumAll(o) { return o.items.reduce(function (s, x) { var it = BY[x.id]; return s + (it ? itemPrice(it, x.v) * x.q : 0); }, 0); }
+function moveOrder(o, next) {
+  hapStaff();
+  var p = S.station === "all" || !(o.stations && o.stations[S.station]) ? Store.setOrder(o.id, { status: next }) : Store.setStation(o.id, S.station, next);
+  Promise.resolve(p).catch(staffErr);
+}
+/* only a card that just arrived drops in; the rest stay still, so a busy evening does not shake the screen */
+var seenCards = {};
+function freshCls(id) { if (seenCards[id]) return ""; seenCards[id] = 1; return " fresh"; }
+function canBuzz() { return navigator.vibrate && (!navigator.userActivation || navigator.userActivation.hasBeenActive); }
+function hapStaff() { try { canBuzz() && navigator.vibrate(12); } catch (e) {} }
+function segGroup(values, cur, label, onpick) {
+  return h("div", { class: "seg s-seg", role: "group", style: "grid-template-columns:repeat(" + values.length + ",minmax(0,1fr))" },
+    h("span", { class: "knob", style: "width:calc((100% - 6px)/" + values.length + ");transform:translateX(" + (Math.max(0, values.indexOf(cur)) * 100) + "%)" }),
+    values.map(function (v, i) { return h("button", { "aria-pressed": String(v === cur), onclick: function (e) { if (v === cur) return; slideKnob(e.currentTarget.parentElement, i, function () { onpick(v); }); } }, label(v)); }));
+}
 function renderStaff() {
   if (Store.live() && !S.pinOk) {
     var p = load("cm-pin", "");
     if (!p) { document.getElementById("app").replaceChildren(pinScreen()); return; }
     S.pinOk = true;
   }
+  if (Store.live() && S.who === undefined) { S.who = ""; }
+  if (Store.live() && !S.who && !S.whoAsk) { S.whoAsk = true; Store.whoami().then(function (w) { S.who = w || ""; S.whoAsk = false; if (S.view === "staff" && w && w !== "staff") renderStaff(); }); }
   document.documentElement.lang = S.staffLang;
-  var reqs = S.reqs.filter(function (r) { return r.status === "new"; }).slice().reverse();
-  var lanes = { new: [], accepted: [], served: [] };
-  S.orders.forEach(function (o) { lanes[o.status].push(o); });
-  lanes.new.reverse(); lanes.accepted.reverse(); lanes.served = lanes.served.slice(0, 12);
   var now = new Date();
   var langs = ["vi", "en"];
   var head = h("header", { class: "s-head" },
-    h("div", { class: "s-id" }, h("img", { src: "img/logo.png", alt: "Casa Mika" }), h("h1", null, st("title")), h("span", { class: "clock num" }, String(now.getHours()).padStart(2, "0") + ":" + String(now.getMinutes()).padStart(2, "0"))),
+    h("div", { class: "s-id" }, h("img", { src: "img/logo.png", alt: "Casa Mika" }), h("h1", null, st("title")),
+      h("span", { class: "clock num" }, String(now.getHours()).padStart(2, "0") + ":" + String(now.getMinutes()).padStart(2, "0")),
+      S.who && S.who !== "staff" ? h("span", { class: "s-who" }, S.who) : null),
     h("div", { class: "s-tools" },
       h("div", { class: "lang", role: "group", "aria-label": "Language" }, h("span", { class: "knob", style: "transform:translateX(" + (langs.indexOf(S.staffLang) * 100) + "%)" }),
         langs.map(function (l, i) { return h("button", { "aria-pressed": String(S.staffLang === l), onclick: function (e) { if (S.staffLang === l) return; slideKnob(e.currentTarget.parentElement, i, function () { S.staffLang = l; save("cm-staff-lang", l); renderStaff(); }); } }, l === "vi" ? "Việt" : "Eng"); })),
       h("button", { class: "press", "aria-pressed": String(S.sound), onclick: toggleSound }, ic("sound", 20), S.sound ? st("soundOn") : st("sound")),
       h("button", { class: "press", onclick: openStop }, ic("ban", 20), st("stop") + (Object.keys(S.stop).length ? " · " + Object.keys(S.stop).length : "")),
+      h("button", { class: "press", onclick: function () { openStaffOrder(null); } }, ic("plus", 20), st("newOrder")),
       h("button", { class: "press", onclick: clearDone }, ic("trash", 20), st("clear")),
-      h("a", { href: "#table-" + S.table }, st("guest"))));
+      h("button", { class: "press", onclick: function () { save("cm-pin", ""); S.pinOk = false; S.who = ""; renderStaff(); } }, ic("door", 20), st("logout"))));
+  var bar = h("div", { class: "s-bar" },
+    segGroup(["orders", "hall"], S.sview, function (v) { return st(v === "orders" ? "vOrders" : "vHall"); }, function (v) { S.sview = v; save("cm-sview", v); renderStaff(); }),
+    segGroup(["all", "kitchen", "bar"], S.station, function (v) { return st("st_" + v); }, function (v) { S.station = v; save("cm-station", v); renderStaff(); }));
   var notice = S.store === "local" ? h("p", { class: "demo", style: "margin:0" }, T[S.staffLang === "vi" ? "vi" : S.staffLang].demo)
     : (S.offline || S.rtDown || S.slow) ? h("p", { class: "netdown", role: "alert" }, ic("wifi", 22), st("offline")) : null;
   keepAwake();
+  var body = S.sview === "hall" ? hallView() : boardView();
+  document.getElementById("app").replaceChildren(h("div", { class: "staff" }, head, bar, notice, body));
+  staffGlow(null);
+}
+function boardView() {
+  var reqs = S.station === "kitchen" ? [] : S.reqs.filter(function (r) { return r.status === "new"; }).slice().reverse();
+  var lanes = { new: [], accepted: [], served: [] };
+  S.orders.forEach(function (o) { if (!myItems(o).length) return; lanes[myStatus(o)].push(o); });
+  lanes.new.reverse(); lanes.accepted.reverse(); lanes.served = lanes.served.slice(0, 12);
   function lane(k, title, list, card) {
     return h("section", { class: "lane", "data-k": k }, h("h2", null, h("span", null, title), h("b", { class: "num" }, list.length)),
       list.length ? list.map(card) : h("p", { class: "s-empty" }, st("none")));
   }
-  var board = h("div", { class: "lanes" },
-    lane("req", st("req"), reqs, reqCard), lane("new", st("new"), lanes.new, orderCard), lane("accepted", st("accepted"), lanes.accepted, orderCard), lane("served", st("served"), lanes.served, orderCard));
-  document.getElementById("app").replaceChildren(h("div", { class: "staff" }, head, notice, board));
-  staffGlow(null);
+  var ls = [];
+  if (S.station !== "kitchen") ls.push(lane("req", st("req"), reqs, reqCard));
+  ls.push(lane("new", st("new"), lanes.new, orderCard), lane("accepted", st("accepted"), lanes.accepted, orderCard), lane("served", st("served"), lanes.served, orderCard));
+  return h("div", { class: "lanes" + (S.station === "kitchen" ? " three" : "") }, ls);
+}
+function timeTag(ts, warnAt, lateAt) {
+  var m = mins(ts);
+  return h("span", { class: "tm num" + (m >= lateAt ? " late" : m >= warnAt ? " warn" : "") }, m + " " + st("min"));
+}
+function reqCard(r) {
+  var s = SVC.find(function (x) { return x.k === r.kind; });
+  var bx = billEx(r.extra), label = r.kind === "bill" ? st("bill") + (BILL[bx.k] ? " · " + BILL[bx.k][S.staffLang === "vi" ? "vi" : S.staffLang] : "") + (bx.sum ? " · " + money(bx.sum, "vi") : "")
+    : r.kind === "other" ? r.extra : (s.n[S.staffLang] || s.n.vi);
+  return h("article", { class: "tk" + freshCls(r.id) },
+    h("div", { class: "hd" }, h("button", { class: "tb", onclick: function () { openTable(r.table); } }, st("table") + " " + r.table), timeTag(r.createdAt, 2, 4)),
+    h("div", { class: "rq" }, h("span", { class: "ic" }, ic(s ? s.ic : r.kind === "bill" ? "bill" : "pen", 26)), h("b", null, label)),
+    r.kind === "bill" ? h("button", { class: "act press", onclick: function () { openTable(r.table); } }, st("closeTable")) : null,
+    h("button", { class: "act ok press", onclick: function () { hapStaff(); Promise.resolve(Store.setReq(r.id, { status: "done" })).catch(staffErr); } }, ic("check", 20), st("done")));
+}
+function stationLine(o) {
+  if (S.station !== "all") return null;
+  var ks = stationsFor(o); if (ks.length < 2) return null;
+  return h("div", { class: "stline" }, ks.map(function (k) { var v = (o.stations && o.stations[k]) || o.status; return h("span", { class: "s-" + v }, st("st_" + k) + ": " + st(v)); }));
+}
+function orderCard(o) {
+  var items = myItems(o), status = myStatus(o);
+  var total = orderSumAll(o);
+  var next = status === "new" ? "accepted" : status === "accepted" ? "served" : null;
+  var ref = status === "served" ? o.servedAt || o.createdAt : status === "accepted" ? o.acceptedAt || o.createdAt : o.createdAt;
+  return h("article", { class: "tk" + (o.paidAt ? " paid" : "") + freshCls(o.id + status) },
+    h("div", { class: "hd" }, h("button", { class: "tb", onclick: function () { openTable(o.table); } }, st("table") + " " + o.table),
+      status === "served" ? h("span", { class: "tm num" }, mins(o.createdAt) + " " + st("min")) : timeTag(ref, status === "new" ? 2 : 10, status === "new" ? 4 : 15)),
+    h("ul", null, items.map(function (x) {
+      var it = BY[x.id], parts = [];
+      if (it.v && x.v != null && it.v[x.v]) parts.push(S.staffLang === "vi" ? it.v[x.v].n.vi : (it.v[x.v].n[S.staffLang] || it.v[x.v].n.en));
+      if (SPICY_SEC[it.sec]) parts.push(x.sp ? st("spicy") : st("nospicy"));
+      return h("li", null, x.q + " × " + staffName(it), parts.length ? h("small", null, parts.join(" · ")) : null);
+    })),
+    o.chips.length ? h("div", { class: "asks" }, o.chips.map(function (c) { return CHIPS[c][S.staffLang === "vi" ? "vi" : S.staffLang]; }).join(" · ")) : null,
+    o.note ? h("div", { class: "note" }, h("small", null, st("guestNote") + " (" + o.lang.toUpperCase() + ")"), o.note) : null,
+    stationLine(o),
+    h("div", { class: "tk-ft" }, h("span", null, "#" + o.code + (o.staff ? " · " + o.staff : "") + (o.acceptedBy && o.acceptedBy !== "staff" ? " · " + o.acceptedBy : "")),
+      h("span", { class: "num" }, o.paidAt ? st("paid") : money(total, "vi"))),
+    next ? h("button", { class: "act press", onclick: function () { moveOrder(o, next); } }, next === "accepted" ? st("accept") : st("serve")) : null);
+}
+
+/* ---------- the floor: every table at a glance ---------- */
+function tableState(n) {
+  var since = Date.now() - 12 * 3600000;
+  var ords = S.orders.filter(function (o) { return o.table === n && o.createdAt > since && !o.paidAt; });
+  var reqs = S.reqs.filter(function (r) { return r.table === n && r.status === "new"; });
+  var bill = reqs.some(function (r) { return r.kind === "bill"; });
+  var st8 = bill ? "bill" : reqs.length ? "req" : ords.some(function (o) { return o.status === "new"; }) ? "new" : ords.some(function (o) { return o.status === "accepted"; }) ? "cook" : ords.length ? "eat" : "free";
+  return { n: n, state: st8, orders: ords, reqs: reqs, sum: ords.reduce(function (s, o) { return s + orderSumAll(o); }, 0) };
+}
+function tableCount() {
+  var n = parseInt((S.cfg && S.cfg.tables) || 0, 10) || 20;
+  S.orders.forEach(function (o) { if (o.table > n) n = o.table; }); S.reqs.forEach(function (r) { if (r.table > n) n = r.table; });
+  return Math.min(99, n);
+}
+function hallView() {
+  var cells = [];
+  for (var i = 1; i <= tableCount(); i++) {
+    var t8 = tableState(i);
+    cells.push(h("button", { class: "tbl press s-" + t8.state, onclick: (function (n) { return function () { openTable(n); }; })(i) },
+      h("b", { class: "num" }, i),
+      h("span", null, st("hall_" + t8.state)),
+      t8.sum ? h("small", { class: "num" }, money(t8.sum, "vi")) : null));
+  }
+  return h("div", { class: "hall" }, cells);
+}
+function openTable(n) {
+  sheet(function (body, api) {
+    var t8 = tableState(n);
+    fill(body,
+      h("div", { class: "s-title" }, h("h2", null, st("table") + " " + n), h("p", null, st("hall_" + t8.state))),
+      t8.orders.length ? h("div", { class: "tb-orders" }, t8.orders.map(function (o) {
+        return h("div", { class: "tb-o" }, h("div", { class: "tb-oh" }, h("b", null, "#" + o.code), h("span", null, st(o.status) + " · " + mins(o.createdAt) + " " + st("min"))),
+          h("ul", null, o.items.map(function (x) { var it = BY[x.id]; return it ? h("li", null, h("span", null, x.q + " × " + staffName(it)), h("span", { class: "num" }, money(itemPrice(it, x.v) * x.q, "vi"))) : null; })));
+      })) : h("p", { class: "s-empty" }, st("none")),
+      t8.sum ? h("div", { class: "tb-sum" }, h("span", null, st("toPay")), h("b", { class: "num" }, money(t8.sum, "vi"))) : null,
+      t8.orders.length ? h("div", null, h("div", { class: "lab" }, st("closeTable")),
+        h("div", { class: "tb-pay" }, ["cash", "card", "transfer", "qr"].map(function (m) {
+          return h("button", { class: "pill press", "aria-pressed": String(api.pm === m), disabled: api.busy, onclick: function () { api.pm = m; hapStaff(); api.rebuild(); } }, st("pay_" + m));
+        })),
+        api.pm ? h("button", { class: "go press ok-go", disabled: api.busy, onclick: function () {
+          api.busy = true; api.rebuild(); hapStaff();
+          Promise.resolve(Store.closeTable(n, api.pm)).then(function () { toast(st("closed")); closeSheet(); }, function (e) { api.busy = false; api.rebuild(); staffErr(e); });
+        } }, h("span", null, st("closeTable") + " · " + st("pay_" + api.pm)), h("span", { class: "num" }, money(t8.sum, "vi"))) : null) : null,
+      h("button", { class: "pill press so-new", onclick: function () { closeSheet(true); openStaffOrder(n); } }, ic("plus", 20), st("newOrder")));
+  }, { label: st("table") + " " + n, kind: "table" });
+}
+
+/* ---------- a waiter takes an order for a guest ---------- */
+function openStaffOrder(table) {
+  var o = { table: table || 0, q: "", lines: {}, note: "" };
+  sheet(function (body, api) {
+    function norm(s) { return String(s || "").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/đ/g, "d"); }
+    var q = norm(o.q.trim());
+    var list = q ? M.items.filter(function (it) { return !it.hide && !S.stop[it.id] && (norm(it.n.vi).indexOf(q) >= 0 || norm(it.n.en).indexOf(q) >= 0); }).slice(0, 30) : [];
+    var picked = Object.keys(o.lines).filter(function (k) { return o.lines[k] > 0; });
+    var sum = picked.reduce(function (s, k) { var p = k.split("|"); return s + itemPrice(BY[p[0]], p[1] === "" ? null : +p[1]) * o.lines[k]; }, 0);
+    function lineRow(it, v) {
+      var k = it.id + "|" + (v == null ? "" : v), n = o.lines[k] || 0;
+      return h("div", { class: "so-row" }, h("div", null, h("b", null, staffName(it) + (v != null ? " · " + (S.staffLang === "vi" ? it.v[v].n.vi : it.v[v].n.en) : "")), h("small", { class: "num" }, money(itemPrice(it, v), "vi"))),
+        h("div", { class: "stepper" },
+          h("button", { "aria-label": "−", disabled: !n, onclick: function () { o.lines[k] = Math.max(0, n - 1); api.rebuild(); } }, "−"),
+          h("span", { class: "num" }, n),
+          h("button", { "aria-label": "+", onclick: function () { o.lines[k] = n + 1; hapStaff(); api.rebuild(); } }, "+")));
+    }
+    var tIn = h("input", { class: "ad-in num", id: "so-t", inputmode: "numeric", placeholder: st("table"), oninput: function (e) { o.table = parseInt(e.target.value, 10) || 0; api.rebuild(); } }); tIn.value = o.table || "";
+    var sIn = h("input", { type: "search", class: "ad-in", id: "so-q", placeholder: st("search"), oninput: function (e) { o.q = e.target.value; api.rebuild(); } }); sIn.value = o.q;
+    var nIn = h("input", { class: "ad-in", id: "so-n", placeholder: st("guestNote"), maxlength: "300", oninput: function (e) { o.note = e.target.value; } }); nIn.value = o.note;
+    fill(body,
+      h("div", { class: "s-title" }, h("h2", null, st("newOrder"))),
+      h("label", { class: "ad-f" }, h("span", null, st("table")), tIn),
+      sIn,
+      list.length ? h("div", { class: "so-list" }, list.reduce(function (a, it) { if (it.v) it.v.forEach(function (_, i) { a.push(lineRow(it, i)); }); else a.push(lineRow(it, null)); return a; }, [])) : null,
+      picked.length ? h("div", null, h("div", { class: "lab" }, st("inOrder")), h("div", { class: "so-list" }, picked.map(function (k) { var p = k.split("|"); return lineRow(BY[p[0]], p[1] === "" ? null : +p[1]); }))) : null,
+      nIn,
+      h("button", { class: "go press", disabled: !picked.length || !(o.table >= 1 && o.table <= 99) || api.busy, onclick: function () {
+        api.busy = true; api.rebuild();
+        var items = picked.map(function (k) { var p = k.split("|"); return { id: p[0], v: p[1] === "" ? null : +p[1], sp: false, q: o.lines[k] }; });
+        Promise.resolve(Store.addOrder({ table: o.table, items: items, chips: [], note: o.note.trim().slice(0, 300), status: "new", createdAt: Date.now(), code: 100 + Math.floor(Math.random() * 900), lang: S.staffLang === "vi" ? "vi" : "en", key: newKey(), staff: S.who && S.who !== "staff" ? S.who : "staff" }))
+          .then(function () { toast(st("sent")); closeSheet(); }, function () { api.busy = false; api.rebuild(); toast(st("netErr"), "x"); });
+      } }, h("span", null, st("send")), h("span", { class: "num" }, money(sum, "vi"))));
+  }, { label: st("newOrder"), kind: "staffOrder" });
 }
 /* the bar tablet must never fall asleep */
 var wakeAsk = 0;
@@ -1248,35 +1499,6 @@ function keepAwake() {
 document.addEventListener("visibilitychange", function () { if (!document.hidden && S.view === "staff") { wakeAsk = 0; keepAwake(); } });
 window.addEventListener("offline", function () { if (S.view === "staff") renderStaff(); });
 window.addEventListener("online", function () { if (S.view === "staff") renderStaff(); });
-function timeTag(ts, warnAt, lateAt) {
-  var m = mins(ts);
-  return h("span", { class: "tm num" + (m >= lateAt ? " late" : m >= warnAt ? " warn" : "") }, m + " " + st("min"));
-}
-function reqCard(r) {
-  var s = SVC.find(function (x) { return x.k === r.kind; });
-  var bx = billEx(r.extra), label = r.kind === "bill" ? st("bill") + (BILL[bx.k] ? " · " + BILL[bx.k][S.staffLang === "vi" ? "vi" : S.staffLang] : "") + (bx.sum ? " · " + money(bx.sum, "vi") : "")
-    : r.kind === "other" ? r.extra : (s.n[S.staffLang] || s.n.vi);
-  return h("article", { class: "tk" },
-    h("div", { class: "hd" }, h("span", { class: "tb" }, st("table") + " " + r.table), timeTag(r.createdAt, 2, 4)),
-    h("div", { class: "rq" }, h("span", { class: "ic" }, ic(s ? s.ic : r.kind === "bill" ? "bill" : "pen", 26)), h("b", null, label)),
-    h("button", { class: "act ok press", onclick: function () { Promise.resolve(Store.setReq(r.id, { status: "done" })).catch(staffErr); } }, ic("check", 20), st("done")));
-}
-function orderCard(o) {
-  var total = o.items.reduce(function (s, x) { return s + itemPrice(BY[x.id], x.v) * x.q; }, 0);
-  var next = o.status === "new" ? "accepted" : o.status === "accepted" ? "served" : null;
-  return h("article", { class: "tk" },
-    h("div", { class: "hd" }, h("span", { class: "tb" }, st("table") + " " + o.table), o.status === "served" ? h("span", { class: "tm num" }, mins(o.createdAt) + " " + st("min")) : timeTag(o.createdAt, o.status === "new" ? 2 : 10, o.status === "new" ? 4 : 15)),
-    h("ul", null, o.items.map(function (x) {
-      var it = BY[x.id], parts = [];
-      if (it.v && x.v != null && it.v[x.v]) parts.push(S.staffLang === "vi" ? it.v[x.v].n.vi : (it.v[x.v].n[S.staffLang] || it.v[x.v].n.en));
-      if (SPICY_SEC[it.sec]) parts.push(x.sp ? st("spicy") : st("nospicy"));
-      return h("li", null, x.q + " × " + staffName(it), parts.length ? h("small", null, parts.join(" · ")) : null);
-    })),
-    o.chips.length ? h("div", { class: "asks" }, o.chips.map(function (c) { return CHIPS[c][S.staffLang === "vi" ? "vi" : S.staffLang]; }).join(" · ")) : null,
-    o.note ? h("div", { class: "note" }, h("small", null, st("guestNote") + " (" + o.lang.toUpperCase() + ")"), o.note) : null,
-    h("div", { style: "display:flex;justify-content:space-between;color:var(--faint);font-size:13px;font-weight:600" }, h("span", null, "#" + o.code), h("span", { class: "num" }, money(total, "vi"))),
-    next ? h("button", { class: "act press", onclick: function () { Promise.resolve(Store.setOrder(o.id, { status: next })).catch(staffErr); } }, next === "accepted" ? st("accept") : st("serve")) : null);
-}
 function toggleSound() {
   try { audio = audio || new (window.AudioContext || window.webkitAudioContext)(); audio.resume(); } catch (e) {}
   S.sound = !S.sound;
@@ -1330,6 +1552,7 @@ function staffGlow(fresh) {
 var lastStop = "";
 function render() {
   closeSheet(true);
+  if (M && M.items) applyEdits();
   if (S.view === "staff") { window.onscroll = null; renderStaff(); clearInterval(staffTimer); staffTimer = setInterval(function () { if (S.view === "staff" && !openSheet) renderStaff(); }, 20000); }
   else { clearInterval(staffTimer); glow("order", "off"); renderGuest(); }
   renderNet();
@@ -1339,9 +1562,10 @@ Store.on(function () {
   /* chimes for the bar */
   var ids = {}; S.orders.forEach(function (o) { ids["o" + o.id] = o.status; }); S.reqs.forEach(function (r) { ids["r" + r.id] = r.status; });
   if (seenIds && S.view === "staff") {
-    var newReq = S.reqs.some(function (r) { return r.status === "new" && !seenIds["r" + r.id]; });
-    var newOrd = S.orders.some(function (o) { return o.status === "new" && !seenIds["o" + o.id]; });
+    var newReq = S.station !== "kitchen" && S.reqs.some(function (r) { return r.status === "new" && !seenIds["r" + r.id]; });
+    var newOrd = S.orders.some(function (o) { return o.status === "new" && !seenIds["o" + o.id] && myItems(o).length; });
     if (newReq) chime("req"); else if (newOrd) chime("order");
+    if (newReq || newOrd) { try { canBuzz() && navigator.vibrate(newReq ? [60, 80, 60, 80, 60] : [80, 60, 80]); } catch (e) {} }
     staffGlow(newReq ? "req" : newOrd ? "order" : null);
   } else if (S.view === "staff") staffGlow(null);
   /* guest: tell when the bar moves my order or finishes my request */

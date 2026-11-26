@@ -190,3 +190,22 @@ window.CM_STAFF = {
   Object.assign(ST.en, { offline: "No connection to the server. New orders may not show yet. Retrying…", back: "Back online" });
   if (ST.ru) Object.assign(ST.ru, { offline: "Нет связи с сервером. Новые заказы могут не появиться. Переподключаемся…", back: "Связь восстановлена" });
 })(window.CM_T, window.CM_BILL, window.CM_STAFF);
+
+/* v11: stations, floor map, closing a table, orders taken by a waiter */
+(function (S) {
+  var add = {
+    vi: { vOrders: "Đơn", vHall: "Sơ đồ bàn", st_all: "Tất cả", st_kitchen: "Bếp", st_bar: "Quầy bar", newOrder: "Tạo đơn", logout: "Đăng xuất",
+      hall_free: "Trống", hall_new: "Đơn mới", hall_cook: "Đang làm", hall_eat: "Đang dùng", hall_req: "Gọi phục vụ", hall_bill: "Tính tiền",
+      toPay: "Cần thanh toán", closeTable: "Đóng bàn", closed: "Đã đóng bàn", paid: "Đã trả", pay_cash: "Tiền mặt", pay_card: "Thẻ", pay_transfer: "Chuyển khoản", pay_qr: "QR",
+      inOrder: "Trong đơn", send: "Gửi đơn", sent: "Đã gửi đơn", locked: "Nhập sai quá nhiều lần. Đợi 15 phút rồi thử lại." },
+    en: { vOrders: "Orders", vHall: "Floor", st_all: "All", st_kitchen: "Kitchen", st_bar: "Bar", newOrder: "New order", logout: "Log out",
+      hall_free: "Free", hall_new: "New order", hall_cook: "Preparing", hall_eat: "Eating", hall_req: "Calling", hall_bill: "Wants the bill",
+      toPay: "To pay", closeTable: "Close table", closed: "Table closed", paid: "Paid", pay_cash: "Cash", pay_card: "Card", pay_transfer: "Transfer", pay_qr: "QR",
+      inOrder: "In this order", send: "Send order", sent: "Order sent", locked: "Too many wrong tries. Wait 15 minutes and try again." },
+    ru: { vOrders: "Заказы", vHall: "Зал", st_all: "Все", st_kitchen: "Кухня", st_bar: "Бар", newOrder: "Новый заказ", logout: "Выйти",
+      hall_free: "Свободен", hall_new: "Новый заказ", hall_cook: "Готовится", hall_eat: "Едят", hall_req: "Зовут", hall_bill: "Просят счёт",
+      toPay: "К оплате", closeTable: "Закрыть стол", closed: "Стол закрыт", paid: "Оплачено", pay_cash: "Наличные", pay_card: "Карта", pay_transfer: "Перевод", pay_qr: "QR",
+      inOrder: "В заказе", send: "Отправить", sent: "Заказ отправлен", locked: "Слишком много неверных попыток. Подождите 15 минут." }
+  };
+  Object.keys(add).forEach(function (l) { if (S[l]) Object.assign(S[l], add[l]); });
+})(window.CM_STAFF);
